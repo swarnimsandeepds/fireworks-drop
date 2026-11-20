@@ -19,7 +19,7 @@ from emergentintegrations.llm.openai import OpenAISpeechToText
 from kits import CATALOG, CATALOG_BY_ID, KHR_RATE, MAX_QTY, SONG_FALLBACK, clean_song, fallback_raw, parse_budget, plan_kit
 from trends import get_trends, trends_prompt
 from storage import init_storage
-from wall import build_wall_router
+from wall import build_wall_router, upload_guard
 from clerk_auth import clerk_router
 
 ROOT_DIR = Path(__file__).parent
@@ -306,6 +306,7 @@ async def create_order(body: OrderRequest):
 
 app.include_router(api_router)
 app.include_router(build_wall_router(db, logger))
+app.middleware("http")(upload_guard)
 app.include_router(clerk_router)
 app.add_middleware(
     CORSMiddleware,

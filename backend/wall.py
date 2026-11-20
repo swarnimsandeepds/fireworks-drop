@@ -10,7 +10,7 @@ from typing import Optional
 import imageio_ffmpeg
 import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from pymongo import ReturnDocument
 
@@ -41,6 +41,28 @@ def _is_admin_email(user_id: str) -> bool:
     r.raise_for_status()
     return any(e["email_address"].lower() in admins and (e.get("verification") or {}).get("status") == "verified"
                for e in r.json()["email_addresses"])
+
+
+_uploading: set = set()
+
+
+async def upload_guard(request: Request, call_next):
+    """Reject oversized or parallel uploads from one phone before the body is read."""
+    if request.method != "POST" or request.url.path != "/api/clips":
+        return await call_next(request)
+    size = request.headers.get("content-length")
+    if not size or not size.isdigit():
+        return JSONResponse({"detail": "Upload size is missing. Try again."}, status_code=411)
+    if int(size) > MAX_UPLOAD + 1024 * 1024:
+        return JSONResponse({"detail": "Video is over 60 MB"}, status_code=413)
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    if ip in _uploading:
+        return JSONResponse({"detail": "One upload at a time. Wait for your last video to finish."}, status_code=429)
+    _uploading.add(ip)
+    try:
+        return await call_next(request)
+    finally:
+        _uploading.discard(ip)
 
 
 def admin_emails() -> set:
@@ -179,8 +201,12 @@ def build_wall_router(db, logger) -> APIRouter:
         for c in clips:
             crews[c["crew"]] = crews.get(c["crew"], 0) + c["week_likes"]
         top = sorted(({"crew": k, "likes": v} for k, v in crews.items() if v > 0), key=lambda x: -x["likes"])[:3]
-        star = next((c for c in clips if c["week_likes"] > 0), None)
-        return {"clips": clips[:60], "top_crews": top, "clip_of_week": star}
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        fresh = [c for c in clips if c["created_at"] >= since]
+        star = next((c for c in fresh if c["week_likes"] > 0), None)
+        kind = "winner" if star else "fresh"
+        star = star or max(fresh, key=lambda c: c["created_at"], default=None)
+        return {"clips": clips[:60], "top_crews": top, "clip_of_week": star, "featured_kind": kind if star else None}
 
     @r.post("/clips/{clip_id}/like")
     async def like_clip(clip_id: str, body: LikeIn):
