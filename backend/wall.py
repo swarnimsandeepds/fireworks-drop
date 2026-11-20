@@ -26,6 +26,7 @@ ENV = "live" if os.environ.get("CLERK_PUBLISHABLE_KEY", "").startswith("pk_live_
 IN_ENV = {"env": {"$in": [ENV, None]}}
 _cache: "OrderedDict[str, bytes]" = OrderedDict()
 _admin_check: dict = {}
+_transcode_slots = asyncio.Semaphore(2)
 
 
 def effective_role(role) -> str:
@@ -139,7 +140,8 @@ def build_wall_router(db, logger) -> APIRouter:
         if kit_id and not kit:
             raise HTTPException(404, "Kit not found")
         try:
-            mp4 = await asyncio.to_thread(transcode, data, keep == "first_minute")
+            async with _transcode_slots:
+                mp4 = await asyncio.to_thread(transcode, data, keep == "first_minute")
         except Exception as e:
             logger.warning("transcode failed: %s", e)
             raise HTTPException(400, "That file isn't a playable video")

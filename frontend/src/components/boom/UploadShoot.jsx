@@ -19,16 +19,16 @@ const videoLength = (f) => new Promise((resolve) => {
   v.src = url;
 });
 
-const LongWarning = ({ secs, onPick }) => {
+const LongWarning = ({ secs, onPick, busy }) => {
   const t = useT();
   return (
     <div className="mt-3 rounded-xl border border-[#FF2A85]/40 bg-[#FF2A85]/10 p-3" role="alert" data-testid="long-video-warning">
       <div className="flex items-center gap-1.5 text-sm font-semibold text-white"><AlertTriangle className="w-4 h-4 text-[#FFD043]" /> {t("longTitle")} ({Math.round(secs)}s)</div>
       <p className="text-xs text-slate-300 mt-1">{t("longBody")}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button onClick={() => onPick("first_minute")} data-testid="long-video-keep-minute-btn" className="h-9 px-3 rounded-full bg-[#FFD043] text-[#06070D] text-xs font-bold">{t("keepMinute")}</button>
-        <button onClick={() => onPick("full")} data-testid="long-video-keep-full-btn" className="h-9 px-3 rounded-full bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-colors">{t("keepFull")}</button>
-        <button onClick={() => onPick(null)} data-testid="long-video-cancel-btn" className="h-9 px-3 rounded-full text-slate-300 text-xs hover:text-white transition-colors">{t("cancel")}</button>
+        <button onClick={() => onPick("first_minute")} disabled={busy} data-testid="long-video-keep-minute-btn" className="h-9 px-3 rounded-full bg-[#FFD043] text-[#06070D] text-xs font-bold disabled:opacity-50">{t("keepMinute")}</button>
+        <button onClick={() => onPick("full")} disabled={busy} data-testid="long-video-keep-full-btn" className="h-9 px-3 rounded-full bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-colors disabled:opacity-50">{t("keepFull")}</button>
+        <button onClick={() => onPick(null)} disabled={busy} data-testid="long-video-cancel-btn" className="h-9 px-3 rounded-full text-slate-300 text-xs hover:text-white transition-colors">{t("cancel")}</button>
       </div>
     </div>
   );
@@ -56,6 +56,7 @@ export const UploadShoot = () => {
   const [pending, setPending] = useState(null);
   const [pct, setPct] = useState(null);
   const file = useRef();
+  const sending = useRef(false);
 
   useEffect(() => {
     const sync = () => setKits(savedKits());
@@ -66,6 +67,8 @@ export const UploadShoot = () => {
   const reset = () => { setPending(null); if (file.current) file.current.value = ""; };
 
   const send = async (f, keep) => {
+    if (sending.current) return;
+    sending.current = true;
     setPct(0);
     const fd = new FormData();
     fd.append("video", f);
@@ -80,6 +83,7 @@ export const UploadShoot = () => {
     } catch (e) {
       toast.error(e.response?.data?.detail || t("uploadFail"));
     } finally {
+      sending.current = false;
       setPct(null);
       reset();
     }
@@ -113,7 +117,7 @@ export const UploadShoot = () => {
           {kits.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
         </select>
       )}
-      {pending && <LongWarning secs={pending.secs} onPick={(keep) => (keep ? send(pending.f, keep) : reset())} />}
+      {pending && <LongWarning secs={pending.secs} busy={busy} onPick={(keep) => (keep ? send(pending.f, keep) : reset())} />}
       {busy && <Progress pct={pct} />}
     </div>
   );

@@ -100,7 +100,7 @@ export const CrewWall = () => {
     setData((d) => ({ ...d, clips: d.clips.map(bump), clip_of_week: d.clip_of_week && bump(d.clip_of_week) }));
     try {
       await axios.post(`${API}/clips/${c.id}/like`, { device_id: deviceId() });
-    } catch {
+    } finally {
       load();
     }
   };

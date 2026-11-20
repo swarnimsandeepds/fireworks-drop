@@ -25,18 +25,20 @@ const AdminVideo = ({ clip, getToken }) => {
 
 function ReviewQueue({ getToken }) {
   const [clips, setClips] = useState(null);
+  const [status, setStatus] = useState("pending");
   const auth = useCallback(async () => ({ headers: { Authorization: `Bearer ${await getToken()}` } }), [getToken]);
   const load = useCallback(async () => {
-    const { data } = await axios.get(`${API}/admin/clips`, await auth());
+    setClips(null);
+    const { data } = await axios.get(`${API}/admin/clips`, { ...(await auth()), params: { status } });
     setClips(data);
-  }, [auth]);
+  }, [auth, status]);
   useEffect(() => { load().catch(() => setClips([])); }, [load]);
 
   const act = async (id, action) => {
     try {
       await axios.post(`${API}/admin/clips/${id}/${action}`, {}, await auth());
       setClips((c) => c.filter((x) => x.id !== id));
-      toast.success(action === "approve" ? "Approved and live on the wall" : "Rejected");
+      toast.success(action === "approve" ? "Approved and live on the wall" : status === "approved" ? "Removed from the wall" : "Rejected");
     } catch {
       toast.error("Couldn't update that clip");
     }
@@ -44,8 +46,13 @@ function ReviewQueue({ getToken }) {
 
   return (
     <section data-testid="admin-review-queue">
-      <h2 className="font-display font-black text-xl">Clips waiting for review</h2>
-      {clips?.length === 0 && <p className="text-sm text-slate-400 mt-2" data-testid="admin-queue-empty">Nothing to review. New uploads land here first.</p>}
+      <div className="flex items-center gap-2">
+        {[["pending", "Waiting for review"], ["approved", "Live on the wall"]].map(([k, label]) => (
+          <button key={k} onClick={() => setStatus(k)} data-testid={`admin-tab-${k}`}
+            className={`h-9 px-4 rounded-full text-xs font-semibold transition-colors ${status === k ? "bg-[#FF2A85] text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>{label}</button>
+        ))}
+      </div>
+      {clips?.length === 0 && <p className="text-sm text-slate-400 mt-3" data-testid="admin-queue-empty">{status === "pending" ? "Nothing to review. New uploads land here first." : "No clips are live yet."}</p>}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
         {clips?.map((c, i) => (
           <div key={c.id} className="rounded-2xl overflow-hidden bg-[#131728] border border-white/10" data-testid={`admin-clip-${i}`}>
@@ -54,8 +61,8 @@ function ReviewQueue({ getToken }) {
               <div className="text-xs font-semibold truncate">{c.crew}</div>
               <div className="text-[10px] text-slate-400">{c.source === "shoot" ? "Real shoot upload" : "Preview recording"} · {new Date(c.created_at).toLocaleString()}</div>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => act(c.id, "approve")} data-testid={`admin-approve-${i}`} className="flex-1 h-9 rounded-full bg-[#FFD043] text-[#06070D] text-xs font-bold flex items-center justify-center gap-1"><Check className="w-3.5 h-3.5" /> Approve</button>
-                <button onClick={() => act(c.id, "reject")} data-testid={`admin-reject-${i}`} className="flex-1 h-9 rounded-full border border-white/15 text-xs flex items-center justify-center gap-1 hover:bg-white/5"><X className="w-3.5 h-3.5" /> Reject</button>
+                {status === "pending" && <button onClick={() => act(c.id, "approve")} data-testid={`admin-approve-${i}`} className="flex-1 h-9 rounded-full bg-[#FFD043] text-[#06070D] text-xs font-bold flex items-center justify-center gap-1"><Check className="w-3.5 h-3.5" /> Approve</button>}
+                <button onClick={() => act(c.id, "reject")} data-testid={`admin-reject-${i}`} className="flex-1 h-9 rounded-full border border-white/15 text-xs flex items-center justify-center gap-1 hover:bg-white/5"><X className="w-3.5 h-3.5" /> {status === "pending" ? "Reject" : "Remove from wall"}</button>
               </div>
             </div>
           </div>

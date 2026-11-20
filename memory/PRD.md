@@ -25,6 +25,11 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Shoot video uploads (ffmpeg transcode to H.264 MP4), Range streaming, weekly likes + top crews, admin clip moderation with Clerk sign-in (email+password, Google), roles (admin/member), /admin page
 
+- 2026-06: Upload progress bar + >1 min warning (post first minute / full / cancel), Clip of the Week banner, 'Open this Shot Kit' link on clips + kit picker on uploads (localStorage boomdrop-kits), admin locked to ADMIN_EMAIL (swarnimsandeep@yahoo.com), admin can remove live clips, max 2 transcodes at once
+
+## Open findings (iteration 8)
+- Multipart spooled before size check; 5-min admin cache; API accepts long video without keep; unknown duration skips warning; no banner when zero likes; banner not limited to clips posted this week; banner video lacks error fallback; storage orphan on DB failure; no idempotency on retries; wall capped at 500/60 clips; 24h public cache on rejected clips
+
 ## Backlog (from test report iteration 2)
 - P1: Enforce 4-6 cues and a drop cue after budget trimming; reconcile cue counts against cart quantities; cap the size of LLM-supplied quantities
 - P1: Pause/resume in the preview; the DROP label stays on screen when the drop is at 14-15s; the 9:16 frame is stretched on tall, narrow phones
