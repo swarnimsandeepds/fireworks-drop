@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Send, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n";
@@ -8,7 +8,7 @@ const fit = (ctx, text, max, size, weight = 900) => {
   do { ctx.font = `${weight} ${s}px Outfit, "Noto Sans Khmer", sans-serif`; s -= 4; } while (ctx.measureText(text).width > max && s > 24);
 };
 
-export const drawCard = async (c, label) => {
+export const drawCard = async (c, label, link) => {
   await document.fonts?.ready;
   const cv = document.createElement("canvas");
   cv.width = 1080; cv.height = 1350;
@@ -31,6 +31,11 @@ export const drawCard = async (c, label) => {
   x.fillStyle = "#E2E8F0";
   if (c.song) { fit(x, c.song, 900, 52, 600); x.fillText(c.song, 540, 800); }
   if (c.kit_name) { x.fillStyle = "#FFD043"; fit(x, c.kit_name, 900, 52, 700); x.fillText(c.kit_name, 540, 890); }
+  if (link) {
+    const [host, path] = link.replace(/^https?:\/\//, "").split("/?");
+    x.fillStyle = "#FFFFFF"; x.font = '600 30px "JetBrains Mono", monospace';
+    x.fillText(host, 540, 980, 940); x.fillText(`/?${path}`, 540, 1025, 940);
+  }
   x.fillStyle = "#FFFFFF"; x.font = '900 72px Outfit, sans-serif'; x.fillText("BoomDrop", 540, 1150);
   x.fillStyle = "#94A3B8"; x.font = '500 36px "Plus Jakarta Sans", sans-serif'; x.fillText("Fireworks that hit on the drop · Phnom Penh", 540, 1215);
   return new Promise((res) => cv.toBlob(res, "image/png"));
@@ -38,30 +43,33 @@ export const drawCard = async (c, label) => {
 
 export const ShareWinner = ({ c }) => {
   const t = useT();
-  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState(null);
   const url = c.kit_id ? `${window.location.origin}/?kit=${c.kit_id}` : window.location.origin;
+  const label = t("clipOfWeek");
+  useEffect(() => {
+    let live = true;
+    setFile(null);
+    drawCard(c, label, c.kit_id ? url : "").then((b) => live && b && setFile(new File([b], "boomdrop-winner.png", { type: "image/png" })));
+    return () => { live = false; };
+  }, [c, label, url]);
   const text = `${c.crew} ${t("winText")} ${c.week_likes} ♥ ${c.kit_name ? `— ${c.kit_name}` : ""}`.trim();
 
   const share = async () => {
-    setBusy(true);
     try {
-      const blob = await drawCard(c, t("clipOfWeek"));
-      const file = new File([blob], "boomdrop-winner.png", { type: "image/png" });
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], text: `${text}\n${url}` });
       } else {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
         window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, "_blank", "noopener");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
         toast.success(t("cardSaved"));
       }
     } catch (e) {
       if (e?.name !== "AbortError") toast.error(t("postFail"));
-    } finally {
-      setBusy(false);
     }
   };
+  const busy = !file;
 
   return (
     <button onClick={share} disabled={busy} data-testid="clip-of-week-share-btn"

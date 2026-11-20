@@ -27,6 +27,11 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Upload progress bar + >1 min warning (post first minute / full / cancel), Clip of the Week banner, 'Open this Shot Kit' link on clips + kit picker on uploads (localStorage boomdrop-kits), admin locked to ADMIN_EMAIL (swarnimsandeep@yahoo.com), admin can remove live clips, max 2 transcodes at once
 
+- 2026-06: Winner share card (ShareWinner.jsx: 1080x1350 PNG with crew/likes/song/kit/link, Web Share files or Telegram + download), Clip of the Week only from clips posted in the last 7 days (featured_kind winner/fresh, empty prompt banner), upload_guard middleware (413 >61MB before reading body, 411 no length, 429 parallel per IP). Redeployed once before these; redeploy again needed.
+
+## Open findings (iteration 9, top)
+- Shared wifi (same IP) blocks a 2nd phone (429); X-Forwarded-For trusted; up to 60 MB per waiting upload held in memory; Khmer users see English 413/429 text; admin list errors shown as empty; Remove from wall has no confirm; unreadable duration skips warning; likes failures silent
+
 ## Open findings (iteration 8)
 - Multipart spooled before size check; 5-min admin cache; API accepts long video without keep; unknown duration skips warning; no banner when zero likes; banner not limited to clips posted this week; banner video lacks error fallback; storage orphan on DB failure; no idempotency on retries; wall capped at 500/60 clips; 24h public cache on rejected clips
 

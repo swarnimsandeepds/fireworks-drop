@@ -127,7 +127,13 @@ export const CrewWall = () => {
 
       <UploadShoot />
 
-      {data?.clip_of_week && <ClipOfWeek c={data.clip_of_week} kind={data.featured_kind} onLike={like} />}
+      {data?.clip_of_week && <ClipOfWeek key={data.clip_of_week.id} c={data.clip_of_week} kind={data.featured_kind} onLike={like} />}
+      {data && !data.clip_of_week && (
+        <div className="mt-4 rounded-3xl border border-dashed border-[#FFD043]/50 bg-[#FFD043]/5 p-5" data-testid="clip-of-week-empty-banner">
+          <div className="flex items-center gap-1.5 font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]"><Crown className="w-4 h-4" /> {t("clipOfWeek")}</div>
+          <p className="mt-2 text-sm text-slate-200" data-testid="clip-of-week-be-winner">{t("beWinner")}</p>
+        </div>
+      )}
 
       {data?.top_crews?.length > 0 && (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1" data-testid="top-crews-strip">
