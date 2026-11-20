@@ -43,13 +43,17 @@ CATALOG = [
 ]
 CATALOG_BY_ID = {c["id"]: c for c in CATALOG}
 
+SONG_FALLBACK = "Your trending track"
+
 SYSTEM_PROMPT = (
     "You are BoomDrop, a fireworks stand for TikTok dancers in Phnom Penh. Build a Shot Kit for a 15 second video. "
     "Use only items from the catalog. Stay within the budget. Put the biggest effect on the beat drop. "
     "Return only JSON with: kit_name, song, drop_second, cues (array of 4 to 6 objects with second, item_id, effect, "
     "placement_tip), filming_tip, cart (array of item_id, name, qty, price_usd), total_usd, total_khr.\n\n"
     f"Catalog (id, name, price_usd, effect type):\n{json.dumps(CATALOG)}\n"
-    f"Convert USD to riel at {KHR_RATE} KHR per dollar. price_usd in cart is the unit price."
+    f"Convert USD to riel at {KHR_RATE} KHR per dollar. price_usd in cart is the unit price. "
+    f"If the user does not name a song, set song to exactly \"{SONG_FALLBACK}\". The song field must be under 6 words, "
+    "with no instructions, notes or parentheses."
 )
 
 app = FastAPI()
@@ -65,6 +69,7 @@ class Cue(BaseModel):
     item_id: int
     item_name: str
     effect: str
+    effect_type: str
     placement_tip: str
 
 
@@ -97,6 +102,43 @@ def parse_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
+BUDGET_PATTERNS = [
+    r"\$\s*(\d+(?:\.\d+)?)",
+    r"(\d+(?:\.\d+)?)\s*(?:usd|dollars?|bucks)\b",
+    r"budget\D{0,15}(\d+(?:\.\d+)?)",
+]
+
+
+def parse_budget(text: str):
+    t = text.lower()
+    for pat in BUDGET_PATTERNS:
+        m = re.search(pat, t)
+        if m:
+            return float(m.group(1))
+    m = re.search(r"(\d[\d,]*)\s*(?:khr|riel)", t)
+    return float(m.group(1).replace(",", "")) / KHR_RATE if m else None
+
+
+def clean_song(value) -> str:
+    song = re.sub(r"[\(\)\[\]]", "", str(value or "")).strip(" .-\"'")
+    bad = re.search(r"\b(not specified|unknown|none|n/a|choose|pick|any|your choice|user|trending)\b", song, re.I)
+    if not song or bad or len(song.split()) > 6:
+        return SONG_FALLBACK
+    return song
+
+
+def fit_budget(cart: List["CartItem"], budget: float, drop_ids: set) -> List["CartItem"]:
+    cart = [l.model_copy() for l in cart]
+    while cart and sum(l.line_usd for l in cart) > budget + 1e-9:
+        pool = [l for l in cart if l.item_id not in drop_ids] or cart
+        cheapest = min(pool, key=lambda l: l.price_usd)
+        cheapest.qty -= 1
+        cheapest.line_usd = round(cheapest.qty * cheapest.price_usd, 2)
+        if cheapest.qty <= 0:
+            cart.remove(cheapest)
+    return cart
+
+
 def build_kit(request: str, raw: dict) -> ShotKit:
     cues = []
     for c in raw.get("cues", []):
@@ -105,7 +147,7 @@ def build_kit(request: str, raw: dict) -> ShotKit:
             continue
         sec = max(0.0, min(15.0, float(c.get("second", 0))))
         cues.append(Cue(second=sec, item_id=item["id"], item_name=item["name"],
-                        effect=str(c.get("effect", item["effect"])), placement_tip=str(c.get("placement_tip", ""))))
+                        effect=str(c.get("effect", item["effect"])), effect_type=item["effect"], placement_tip=str(c.get("placement_tip", ""))))
     cues.sort(key=lambda c: c.second)
     cart = []
     for line in raw.get("cart", []):
@@ -117,9 +159,18 @@ def build_kit(request: str, raw: dict) -> ShotKit:
                              line_usd=round(item["price_usd"] * qty, 2)))
     if len(cues) < 1 or not cart:
         raise ValueError("Kit missing cues or cart")
+    drop_second = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
+    budget = parse_budget(request)
+    if budget is not None:
+        drop_ids = {c.item_id for c in cues if abs(c.second - drop_second) < 0.6}
+        cart = fit_budget(cart, budget, drop_ids)
+        kept = {l.item_id for l in cart}
+        cues = [c for c in cues if c.item_id in kept]
+        if not cart or not cues:
+            raise ValueError("Budget too small for a kit")
     total = round(sum(c.line_usd for c in cart), 2)
-    return ShotKit(request=request, kit_name=str(raw.get("kit_name", "BoomDrop Kit")), song=str(raw.get("song", "")),
-                   drop_second=max(0.0, min(15.0, float(raw.get("drop_second", 8)))), cues=cues,
+    return ShotKit(request=request, kit_name=str(raw.get("kit_name", "BoomDrop Kit")), song=clean_song(raw.get("song")),
+                   drop_second=drop_second, cues=cues,
                    filming_tip=str(raw.get("filming_tip", "")), cart=cart, total_usd=total,
                    total_khr=int(round(total * KHR_RATE)))
 
