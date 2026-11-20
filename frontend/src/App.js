@@ -5,6 +5,7 @@ import { Header } from "@/components/boom/Header";
 import { MicButton } from "@/components/boom/MicButton";
 import { RequestInput } from "@/components/boom/RequestInput";
 import { ShotKitCard } from "@/components/boom/ShotKitCard";
+import { TrendingStrip } from "@/components/boom/TrendingStrip";
 
 import { API } from "@/lib/api";
 
@@ -27,7 +28,7 @@ function App() {
       setKit(data);
       setTimeout(() => document.getElementById("shot-kit")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Could not build your Shot Kit. Try again.");
+      toast.error("Connection hiccup. Tap Build Shot Kit again.");
     } finally {
       setLoading(false);
     }
@@ -43,6 +44,9 @@ function App() {
           <p className="font-display uppercase tracking-[0.2em] text-xs text-[#FFD043]" data-testid="tagline">
             Fireworks that hit on the drop.
           </p>
+          <p className="text-sm text-slate-300 mt-2 leading-relaxed" data-testid="intro-copy">
+            Tell us your dance. We build the fireworks for your 15 second shot and deliver by tuk-tuk in Phnom Penh.
+          </p>
           <h1 className="font-display font-black text-4xl sm:text-5xl tracking-tight mt-2 leading-[1.05]">
             Say your dance.<br />
             <span className="text-[#FF2A85]">We'll light the drop.</span>
@@ -51,10 +55,14 @@ function App() {
             Hold the mic and tell us your song, spot in Phnom Penh, crew size and budget.
           </p>
         </section>
+        <TrendingStrip onAdd={(t) => setText((cur) => (cur.trim() ? `${cur.trim().replace(/[.,]$/, "")}, ${t}` : t))} />
         <MicButton onTranscript={onTranscript} disabled={loading} />
         <RequestInput transcript={transcript} text={text} setText={setText} onSubmit={buildKit} loading={loading} />
         {kit && <ShotKitCard kit={kit} />}
       </main>
+      <footer className="relative z-10 max-w-md mx-auto px-5 pb-10 text-center font-mono-bd text-[10px] uppercase tracking-widest text-slate-500" data-testid="app-footer">
+        Built by voice with Willow. Live trends by You.com. Shipped on Emergent.
+      </footer>
     </div>
   );
 }

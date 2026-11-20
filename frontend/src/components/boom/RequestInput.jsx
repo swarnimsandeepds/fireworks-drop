@@ -17,7 +17,10 @@ export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) =
       </div>
     )}
     <div>
-      <label htmlFor="req" className="font-mono-bd text-[10px] uppercase tracking-widest text-slate-400">Or type it</label>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor="req" className="font-mono-bd text-[10px] uppercase tracking-widest text-slate-400">Or type it</label>
+        <span className="text-[11px] text-[#FFD043]/80" data-testid="willow-hint">Tip: dictate your order with Willow</span>
+      </div>
       <textarea
         id="req"
         data-testid="manual-text-input"

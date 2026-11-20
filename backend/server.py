@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import os
@@ -15,6 +16,8 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
+from kits import CATALOG, CATALOG_BY_ID, KHR_RATE, MAX_QTY, SONG_FALLBACK, clean_song, fallback_raw, parse_budget, plan_kit
+from trends import get_trends, trends_prompt
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -22,28 +25,9 @@ load_dotenv(ROOT_DIR / '.env')
 client = AsyncIOMotorClient(os.environ['MONGO_URL'])
 db = client[os.environ['DB_NAME']]
 LLM_KEY = os.environ['EMERGENT_LLM_KEY']
-KHR_RATE = 4000
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-CATALOG = [
-    {"id": 1, "name": "Cold Sparkler Wand", "price_usd": 1.50, "effect": "sparkle"},
-    {"id": 2, "name": "Gold Fountain Small", "price_usd": 3.00, "effect": "fountain"},
-    {"id": 3, "name": "Gold Fountain Tall", "price_usd": 5.00, "effect": "fountain"},
-    {"id": 4, "name": "Pink Smoke Stick", "price_usd": 2.50, "effect": "smoke"},
-    {"id": 5, "name": "Blue Smoke Stick", "price_usd": 2.50, "effect": "smoke"},
-    {"id": 6, "name": "Confetti Popper", "price_usd": 1.00, "effect": "confetti"},
-    {"id": 7, "name": "Silver Spinner", "price_usd": 2.00, "effect": "spinner"},
-    {"id": 8, "name": "Crackle Ring", "price_usd": 4.00, "effect": "crackle"},
-    {"id": 9, "name": "Heart Sparkler", "price_usd": 2.00, "effect": "sparkle"},
-    {"id": 10, "name": "Neon Strobe Pot", "price_usd": 3.50, "effect": "strobe"},
-    {"id": 11, "name": "Glitter Cannon", "price_usd": 6.00, "effect": "confetti"},
-    {"id": 12, "name": "Crew Pack (6 wands, 2 fountains)", "price_usd": 12.00, "effect": "bundle"},
-]
-CATALOG_BY_ID = {c["id"]: c for c in CATALOG}
-
-SONG_FALLBACK = "Your trending track"
 
 SYSTEM_PROMPT = (
     "You are BoomDrop, a fireworks stand for TikTok dancers in Phnom Penh. Build a Shot Kit for a 15 second video. "
@@ -81,6 +65,18 @@ class CartItem(BaseModel):
     line_usd: float
 
 
+class Source(BaseModel):
+    title: str
+    url: str
+
+
+class OrderRequest(BaseModel):
+    kit_id: str
+    spot: str = Field(min_length=2, max_length=60)
+    time: str = Field(min_length=3, max_length=20)
+    total_usd: float
+
+
 class ShotKit(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     request: str
@@ -92,6 +88,9 @@ class ShotKit(BaseModel):
     cart: List[CartItem]
     total_usd: float
     total_khr: int
+    sources: List["Source"] = []
+    live_trends: bool = False
+    fallback: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -102,79 +101,36 @@ def parse_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-BUDGET_PATTERNS = [
-    r"\$\s*(\d[\d,]*(?:\.\d+)?)",
-    r"(\d[\d,]*(?:\.\d+)?)\s*(?:usd|dollars?|bucks)\b",
-    r"budget\D{0,15}(\d[\d,]*(?:\.\d+)?)",
-]
-
-
-def parse_budget(text: str):
-    t = text.lower()
-    m = re.search(r"(\d[\d,]*)\s*(?:khr|riels?|៛)", t)
-    if m:
-        return float(m.group(1).replace(",", "")) / KHR_RATE
-    for pat in BUDGET_PATTERNS:
-        m = re.search(pat, t)
-        if m:
-            return float(m.group(1).replace(",", ""))
-    return None
-
-
-def clean_song(value) -> str:
-    song = re.sub(r"[\(\)\[\]]", "", str(value or "")).strip(" .-\"'")
-    bad = re.search(r"\b(not specified|unknown|none|n/a|choose|pick|any|your choice|user|trending)\b", song, re.I)
-    if not song or bad or len(song.split()) > 6:
-        return SONG_FALLBACK
-    return song
-
-
-def fit_budget(cart: List["CartItem"], budget: float, drop_ids: set) -> List["CartItem"]:
-    cart = [l.model_copy() for l in cart]
-    while cart and sum(l.line_usd for l in cart) > budget + 1e-9:
-        pool = [l for l in cart if l.item_id not in drop_ids] or cart
-        cheapest = min(pool, key=lambda l: l.price_usd)
-        cheapest.qty -= 1
-        cheapest.line_usd = round(cheapest.qty * cheapest.price_usd, 2)
-        if cheapest.qty <= 0:
-            cart.remove(cheapest)
-    return cart
-
-
-def build_kit(request: str, raw: dict) -> ShotKit:
+def build_kit(request: str, raw: dict, trends: dict) -> ShotKit:
     cues = []
     for c in raw.get("cues", []):
         item = CATALOG_BY_ID.get(int(c.get("item_id", 0)))
-        if not item:
-            continue
-        sec = max(0.0, min(15.0, float(c.get("second", 0))))
-        cues.append(Cue(second=sec, item_id=item["id"], item_name=item["name"],
-                        effect=str(c.get("effect", item["effect"])), effect_type=item["effect"], placement_tip=str(c.get("placement_tip", ""))))
-    cues.sort(key=lambda c: c.second)
-    cart = []
+        sec = float(c.get("second", -1))
+        if item and 0 <= sec <= 15:
+            cues.append({"second": sec, "item_id": item["id"], "effect": str(c.get("effect") or item["effect"]),
+                         "placement_tip": str(c.get("placement_tip", ""))})
+    if not cues:
+        raise ValueError("Kit has no valid cues")
+    asked = {}
     for line in raw.get("cart", []):
         item = CATALOG_BY_ID.get(int(line.get("item_id", 0)))
-        qty = int(line.get("qty", 0))
-        if not item or qty <= 0:
-            continue
-        cart.append(CartItem(item_id=item["id"], name=item["name"], qty=qty, price_usd=item["price_usd"],
-                             line_usd=round(item["price_usd"] * qty, 2)))
-    if len(cues) < 1 or not cart:
-        raise ValueError("Kit missing cues or cart")
-    drop_second = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
-    budget = parse_budget(request)
-    if budget is not None:
-        drop_ids = {c.item_id for c in cues if abs(c.second - drop_second) < 0.6}
-        cart = fit_budget(cart, budget, drop_ids)
-        kept = {l.item_id for l in cart}
-        cues = [c for c in cues if c.item_id in kept]
-        if not cart or not cues:
-            raise ValueError("Budget too small for a kit")
+        if item:
+            asked[item["id"]] = asked.get(item["id"], 0) + min(max(int(line.get("qty", 0)), 0), MAX_QTY)
+    usage = {}
+    for c in cues:
+        usage[c["item_id"]] = usage.get(c["item_id"], 0) + 1
+    extra = {i: q - usage.get(i, 0) for i, q in asked.items() if q > usage.get(i, 0)}
+    drop = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
+    planned, qty = plan_kit(cues, extra, drop, parse_budget(request))
+    cue_models = [Cue(second=c["second"], item_id=c["item_id"], item_name=CATALOG_BY_ID[c["item_id"]]["name"], effect=c["effect"],
+                      effect_type=CATALOG_BY_ID[c["item_id"]]["effect"], placement_tip=c["placement_tip"]) for c in planned]
+    cart = [CartItem(item_id=i, name=CATALOG_BY_ID[i]["name"], qty=q, price_usd=CATALOG_BY_ID[i]["price_usd"],
+                     line_usd=round(CATALOG_BY_ID[i]["price_usd"] * q, 2)) for i, q in sorted(qty.items())]
     total = round(sum(c.line_usd for c in cart), 2)
-    return ShotKit(request=request, kit_name=str(raw.get("kit_name", "BoomDrop Kit")), song=clean_song(raw.get("song")),
-                   drop_second=drop_second, cues=cues,
-                   filming_tip=str(raw.get("filming_tip", "")), cart=cart, total_usd=total,
-                   total_khr=int(round(total * KHR_RATE)))
+    return ShotKit(request=request, kit_name=str(raw.get("kit_name") or "BoomDrop Kit")[:80], song=clean_song(raw.get("song")),
+                   drop_second=drop, cues=cue_models, filming_tip=str(raw.get("filming_tip") or ""), cart=cart,
+                   total_usd=total, total_khr=int(round(total * KHR_RATE)),
+                   sources=[Source(**x) for x in trends.get("sources", [])[:3]], live_trends=trends.get("live", False))
 
 
 @api_router.get("/catalog")
@@ -201,21 +157,45 @@ async def transcribe(audio: UploadFile = File(...)):
     return {"text": res.text.strip()}
 
 
+@api_router.get("/trends")
+async def trends():
+    data = await get_trends(LLM_KEY)
+    return data
+
+
+async def _llm_kit(request: str, trends_data: dict) -> ShotKit:
+    chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT) \
+        .with_model("anthropic", "claude-sonnet-5-5")
+    text = await asyncio.wait_for(chat.send_message(UserMessage(text=request + trends_prompt(trends_data))), 60)
+    return build_kit(request, parse_json(text), trends_data)
+
+
 @api_router.post("/shot-kit", response_model=ShotKit)
 async def create_shot_kit(body: KitRequest):
-    last_err = None
-    for _ in range(2):
-        chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT) \
-            .with_model("anthropic", "claude-sonnet-5-5")
+    trends_data = await get_trends(LLM_KEY)
+    kit = None
+    for attempt in range(2):
         try:
-            text = await chat.send_message(UserMessage(text=body.request))
-            kit = build_kit(body.request, parse_json(text))
-            await db.shot_kits.insert_one(kit.model_dump())
-            return kit
+            kit = await _llm_kit(body.request, trends_data)
+            break
         except Exception as e:
-            last_err = e
-            logger.warning("shot kit attempt failed: %s", e)
-    raise HTTPException(502, f"Could not build a Shot Kit: {last_err}")
+            logger.warning("shot kit attempt %d failed: %s", attempt + 1, e)
+    if kit is None:
+        kit = build_kit(body.request, fallback_raw(body.request, trends_data), trends_data)
+        kit.fallback = True
+    try:
+        await db.shot_kits.insert_one(kit.model_dump())
+    except Exception as e:
+        logger.warning("saving kit failed: %s", e)
+    return kit
+
+
+@api_router.post("/orders")
+async def create_order(body: OrderRequest):
+    order = {"order_no": f"BD-{uuid.uuid4().hex[:6].upper()}", **body.model_dump(),
+             "total_khr": int(round(body.total_usd * KHR_RATE)), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.orders.insert_one(dict(order))
+    return order
 
 
 app.include_router(api_router)

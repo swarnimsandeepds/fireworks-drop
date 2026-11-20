@@ -1,5 +1,7 @@
 import { lazy, Suspense, useState } from "react";
-import { Music2, Video, Play } from "lucide-react";
+import { Music2, Video, Play, ShoppingCart } from "lucide-react";
+import { WhyThisKit } from "@/components/boom/WhyThisKit";
+import { OrderFlow } from "@/components/boom/OrderFlow";
 import { CueList } from "@/components/boom/CueList";
 import { Cart } from "@/components/boom/Cart";
 
@@ -7,6 +9,7 @@ const ShotPreview = lazy(() => import("@/components/preview/ShotPreview"));
 
 export const ShotKitCard = ({ kit }) => {
   const [preview, setPreview] = useState(null);
+  const [ordering, setOrdering] = useState(false);
 
   const open = () => {
     let ctx = null;
@@ -55,7 +58,18 @@ export const ShotKitCard = ({ kit }) => {
         </div>
         <p className="text-sm text-slate-200 leading-relaxed">{kit.filming_tip}</p>
       </div>
+      <WhyThisKit kit={kit} />
       <Cart kit={kit} />
+      <div className="px-5 pb-5 bg-[#0D0F1A]">
+        <button
+          onClick={() => setOrdering(true)}
+          data-testid="order-kit-button"
+          className="w-full h-14 rounded-full bg-[#FFD043] text-[#06070D] font-display font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_28px_rgba(255,208,67,0.45)] hover:bg-[#FFE07D] active:scale-[0.98] transition-[background-color,transform]"
+        >
+          <ShoppingCart className="w-5 h-5" /> Order this kit
+        </button>
+      </div>
+      <OrderFlow kit={kit} open={ordering} onOpenChange={setOrdering} />
       {preview && (
         <Suspense fallback={<div className="fixed inset-0 z-50 bg-[#06070D] grid place-items-center font-mono-bd text-xs text-slate-400">Loading preview…</div>}>
           <ShotPreview kit={kit} audioCtx={preview.ctx} onClose={close} />
