@@ -1,0 +1,131 @@
+{
+  "project_name": "BoomDrop",
+  "archetype": "Electric Cyber-Night & Khmer Gold Fusion",
+  "app_type": "mobile_web_app",
+  "tagline": "Fireworks that hit on the drop.",
+  "target_audience": "TikTok dancers, hype choreographers, and content creators shooting in Phnom Penh, Cambodia (Riverside, Koh Pich, Independence Monument)",
+  "theme": {
+    "mode": "dark",
+    "background_base": "#06070D",
+    "background_elevated": "#0D0F1A",
+    "background_card": "#131728",
+    "background_card_border": "rgba(255, 45, 118, 0.22)",
+    "neon_pink": {
+      "primary": "#FF2A85",
+      "glow": "rgba(255, 42, 133, 0.45)",
+      "hover": "#FF529D",
+      "muted": "rgba(255, 42, 133, 0.12)"
+    },
+    "khmer_gold": {
+      "primary": "#FFD043",
+      "glow": "rgba(255, 208, 67, 0.45)",
+      "hover": "#FFE07D",
+      "muted": "rgba(255, 208, 67, 0.14)"
+    },
+    "deep_sky": {
+      "navy": "#0B1021",
+      "midnight_purple": "#170E28",
+      "border_subtle": "#1E2640"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#94A3B8",
+      "muted": "#64748B",
+      "accent_pink": "#FF5E9F",
+      "accent_gold": "#FCD34D"
+    }
+  },
+  "typography": {
+    "heading_font": "Outfit, -apple-system, BlinkMacSystemFont, sans-serif",
+    "body_font": "Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, sans-serif",
+    "mono_font": "JetBrains Mono, Menlo, monospace",
+    "font_cdn_link": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@500;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap",
+    "rules": {
+      "h1": "font-black tracking-tight text-3xl sm:text-4xl text-white font-['Outfit']",
+      "h2": "font-bold tracking-tight text-xl sm:text-2xl text-white font-['Outfit']",
+      "h3": "font-bold tracking-tight text-lg sm:text-xl text-white font-['Outfit']",
+      "tagline": "text-sm sm:text-base tracking-wide font-medium text-[#FFD043] font-['Outfit'] uppercase",
+      "timeline_badge": "font-mono font-bold text-xs uppercase px-2 py-0.5 rounded tracking-wider"
+    }
+  },
+  "visual_enhancers": {
+    "drop_shadow_neon": "0 0 25px rgba(255, 42, 133, 0.55), 0 0 50px rgba(255, 42, 133, 0.2)",
+    "drop_shadow_gold": "0 0 25px rgba(255, 208, 67, 0.5), 0 0 45px rgba(255, 208, 67, 0.2)",
+    "glass_panel": "backdrop-blur-xl bg-[#0D0F1A]/85 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.6)]",
+    "noise_grain": "radial-gradient(circle at 50% 0%, rgba(255, 42, 133, 0.15) 0%, rgba(255, 208, 67, 0.08) 35%, transparent 70%)"
+  },
+  "layout_and_structure": {
+    "container": "max-w-md mx-auto px-4 py-5 min-h-screen flex flex-col justify-between relative z-10",
+    "header": {
+      "description": "Sticky top bar with glass background, brand logo with spark/firework indicator, Phnom Penh badge (1 USD = 4,100 KHR tag), and catalog modal trigger",
+      "height": "h-16"
+    },
+    "hero_voice_zone": {
+      "description": "Massive central Push-To-Talk microphone button with interactive pulse rings, live audio-wave visualization, and tactile hold/tap states",
+      "mic_button_size": "w-28 h-28 sm:w-32 sm:h-32 rounded-full",
+      "mic_states": {
+        "idle": "bg-gradient-to-tr from-[#FF2A85] via-[#E11D48] to-[#FFD043] shadow-[0_0_35px_rgba(255,42,133,0.6)] hover:scale-105 active:scale-95 transition-transform",
+        "recording": "animate-pulse ring-8 ring-[#FF2A85]/40 bg-[#FF2A85] shadow-[0_0_55px_rgba(255,42,133,0.9)] scale-110",
+        "processing": "animate-spin border-4 border-t-[#FFD043] border-r-transparent border-b-[#FF2A85] border-l-transparent"
+      }
+    },
+    "dual_input_zone": {
+      "transcript_box": "Neon bordered transcript bubble displaying real-time or transcribed voice request with quick edit capability",
+      "text_input_fallback": "Visible text area with neon focus ring, Phnom Penh dance vibe chips (e.g. 'Koh Pich Sunset Drop', 'Riverside Bass Boost', 'Independence Plaza 12s Drop', 'Royal Palace Sparkler Squad')",
+      "generate_button": "High-impact CTA 'BUILD SHOT KIT' with gold-spark accents and instant feedback"
+    },
+    "shot_kit_card": {
+      "structure": [
+        "Card Header: Kit Name (e.g., 'Koh Pich Bass Drop 15s Kit'), Song Title & Artist, Drop Second highlight badge (e.g. '💥 DROP AT 0:08s')",
+        "15-Second Interactive Visual Scrub/Timeline: Horizontal 0-15s bar marking cue positions and drop moment",
+        "Vertical Cue List: 4-6 timed steps showing [Second (0:02s), Firework Name, Effect description (e.g. Crackling Gold Comet), Placement & Safety Tip (e.g. 5m behind dancer left)]",
+        "Filming Tip Box: Pro TikTok camera angle, lighting trick, and FPS advice (e.g. 'Shoot 4K 60fps low-angle tracking forward on 0:07s for slow-mo drop explosion')",
+        "Cart & Currency Breakdown: Line items table (Item, Qty, Unit Price, Line Total) with both USD ($) and Cambodian Riel (KHR ៛) total calculation using official standard rate (1 USD = 4,100 KHR)",
+        "Action Buttons: 'Order to TukTuk / Grab Delivery' and 'Share Shot Kit to TikTok Crew'"
+      ]
+    },
+    "catalog_drawer_modal": {
+      "description": "Quick view of Phnom Penh dancer approved pyrotechnic gear: cold spark fountains, neon smoke flares, strobe strobes, Roman candle cakes, safe hand sparklers with specs and prices"
+    }
+  },
+  "media_assets": {
+    "firework_hero_bg": "https://images.unsplash.com/photo-1558858534-45db5c111047?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHw0fHxmaXJld29ya3MlMjBuaWdodCUyMHNreXxlbnwwfHx8fDE3OTUyMDY5MjV8MA&ixlib=rb-4.1.0&q=85",
+    "phnom_penh_skyline_bg": "https://images.unsplash.com/photo-1631067701909-111c10141e07?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwyfHxwaG5vbSUyMHBlbmglMjBuaWdodHxlbnwwfHx8fDE3OTUyMDY5MjV8MA&ixlib=rb-4.1.0&q=85",
+    "sparkler_dancer_accent": "https://images.unsplash.com/photo-1508564733209-edec8a954e40?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHwxfHxzcGFya2xlciUyMGZpcmV3b3JrJTIwZGFuY2VyfGVufDB8fHx8MTc5NTIwNjkyOXww&ixlib=rb-4.1.0&q=85"
+  },
+  "instructions_to_main_agent": [
+    "Build a mobile-first, one-page single page application for BoomDrop in Phnom Penh, Cambodia.",
+    "Do NOT create multiple pages or login screens. The app is zero-friction, one-page.",
+    "Implement Web Speech API (webkitSpeechRecognition/SpeechRecognition) for the push-to-talk mic button, with a solid fallback audio simulation/preset voice recognition if microphone permissions are denied or unsupported in browser.",
+    "Provide presets/chips for rapid testing of TikTok dance scenarios (e.g., '5 Dancers, Koh Pich, Pop Anthem drop at 0:08s, $35 budget', 'Solo Shuffler at Riverside, Phonk Beat drop at 0:06s, $20 budget').",
+    "Include both push-to-talk speech AND a visible fallback text input textarea that stays synced with the transcript.",
+    "Ensure LLM Shot Kit builder handles: kit_name, song, drop_second, 4-6 timed cues (second, item_id, effect, placement_tip), filming_tip, cart (items with id, name, qty, price_usd, total_usd, total_khr). Rate: 1 USD = 4,100 KHR.",
+    "Show the 15-second timeline with drop second glowing in neon pink and gold.",
+    "Add audio playback or sound click effects when tapping mic and triggering cues.",
+    "Include a Catalog Modal/Drawer allowing dancers to browse fireworks inventory with prices in USD and KHR.",
+    "Provide a simulated 15-second rehearsal preview player that runs a timer 0s -> 15s and highlights each cue as it hits!",
+    "Add comprehensive data-testid attributes to all buttons, mic, transcript, text input, cue list items, and cart total."
+  ],
+  "testing_attributes": {
+    "mic_button": "data-testid=\"push-to-talk-mic-button\"",
+    "transcript_display": "data-testid=\"voice-transcript-display\"",
+    "text_input": "data-testid=\"manual-text-input\"",
+    "generate_kit_button": "data-testid=\"generate-shot-kit-button\"",
+    "shot_kit_card": "data-testid=\"shot-kit-card\"",
+    "cue_timeline": "data-testid=\"cue-timeline-15s\"",
+    "cue_item": "data-testid=\"cue-timeline-item\"",
+    "drop_second_badge": "data-testid=\"drop-second-badge\"",
+    "filming_tip_box": "data-testid=\"filming-tip-box\"",
+    "cart_section": "data-testid=\"cart-breakdown-section\"",
+    "total_usd": "data-testid=\"total-price-usd\"",
+    "total_khr": "data-testid=\"total-price-khr\"",
+    "catalog_trigger": "data-testid=\"open-catalog-button\"",
+    "order_button": "data-testid=\"checkout-order-button\""
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": {
+    "no_universal_transition": "Do not use 'transition: all'; specify transition-colors, transition-transform, etc.",
+    "no_transparent_overlays": "Never use fully transparent backgrounds behind text or dropdown menus; always provide dark translucent backdrops like bg-[#0D0F1A]/95 backdrop-blur-md",
+    "theme_cohesion": "Keep deep void dark sky (#06070D) background with neon pink (#FF2A85) and warm gold (#FFD043) accents consistently across cards, borders, and buttons.",
+    "mobile_padding": "Keep padding safe on mobile screens (max-w-md mx-auto) and maintain accessible touch targets (>48px for mic and key actions)."
+  }
+}

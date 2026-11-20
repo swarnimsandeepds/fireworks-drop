@@ -1,0 +1,32 @@
+import { Music2, Video } from "lucide-react";
+import { CueList } from "@/components/boom/CueList";
+import { Cart } from "@/components/boom/Cart";
+
+export const ShotKitCard = ({ kit }) => (
+  <article
+    id="shot-kit"
+    data-testid="shot-kit-card"
+    className="mt-10 rounded-3xl bg-[#131728] border border-[#FF2A85]/25 shadow-[0_8px_40px_rgba(0,0,0,0.6)] overflow-hidden rise"
+  >
+    <header className="p-5 bg-gradient-to-br from-[#FF2A85]/20 via-transparent to-[#FFD043]/10 border-b border-white/5">
+      <p className="font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]">Your Shot Kit · 15s</p>
+      <h2 className="font-display font-black text-2xl tracking-tight mt-1" data-testid="kit-name">{kit.kit_name}</h2>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <span className="flex items-center gap-1.5 text-xs text-slate-300" data-testid="kit-song">
+          <Music2 className="w-3.5 h-3.5 text-[#FF5E9F]" /> {kit.song}
+        </span>
+        <span className="font-mono-bd font-bold text-[10px] uppercase px-2 py-0.5 rounded bg-[#FF2A85] text-white tracking-wider" data-testid="drop-second-badge">
+          Drop @ 0:{String(Math.round(kit.drop_second)).padStart(2, "0")}
+        </span>
+      </div>
+    </header>
+    <CueList cues={kit.cues} drop={kit.drop_second} />
+    <div className="mx-5 mb-5 rounded-2xl border border-[#FFD043]/30 bg-[#FFD043]/10 p-4" data-testid="filming-tip-box">
+      <div className="flex items-center gap-1.5 font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043] mb-1.5">
+        <Video className="w-3.5 h-3.5" /> Filming tip
+      </div>
+      <p className="text-sm text-slate-200 leading-relaxed">{kit.filming_tip}</p>
+    </div>
+    <Cart kit={kit} />
+  </article>
+);

@@ -1,94 +1,171 @@
-import asyncio
-from contextlib import suppress
-from fastapi import FastAPI, APIRouter, Query
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ASCENDING, DESCENDING, IndexModel
+import io
+import json
 import os
-import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+import re
 import uuid
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import List
 
+from dotenv import load_dotenv
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field
+from starlette.middleware.cors import CORSMiddleware
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.openai import OpenAISpeechToText
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(os.environ['MONGO_URL'])
 db = client[os.environ['DB_NAME']]
+LLM_KEY = os.environ['EMERGENT_LLM_KEY']
+KHR_RATE = 4000
 
-# One entry per collection: every field a route filters, sorts or dedupes on. Add the index in the same edit as the query.
-INDEXES: dict[str, list[IndexModel]] = {
-    "status_checks": [
-        IndexModel([("id", ASCENDING)], name="id", unique=True),
-        IndexModel([("timestamp", DESCENDING)], name="timestamp_desc"),
-    ],
-}
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+CATALOG = [
+    {"id": 1, "name": "Cold Sparkler Wand", "price_usd": 1.50, "effect": "sparkle"},
+    {"id": 2, "name": "Gold Fountain Small", "price_usd": 3.00, "effect": "fountain"},
+    {"id": 3, "name": "Gold Fountain Tall", "price_usd": 5.00, "effect": "fountain"},
+    {"id": 4, "name": "Pink Smoke Stick", "price_usd": 2.50, "effect": "smoke"},
+    {"id": 5, "name": "Blue Smoke Stick", "price_usd": 2.50, "effect": "smoke"},
+    {"id": 6, "name": "Confetti Popper", "price_usd": 1.00, "effect": "confetti"},
+    {"id": 7, "name": "Silver Spinner", "price_usd": 2.00, "effect": "spinner"},
+    {"id": 8, "name": "Crackle Ring", "price_usd": 4.00, "effect": "crackle"},
+    {"id": 9, "name": "Heart Sparkler", "price_usd": 2.00, "effect": "sparkle"},
+    {"id": 10, "name": "Neon Strobe Pot", "price_usd": 3.50, "effect": "strobe"},
+    {"id": 11, "name": "Glitter Cannon", "price_usd": 6.00, "effect": "confetti"},
+    {"id": 12, "name": "Crew Pack (6 wands, 2 fountains)", "price_usd": 12.00, "effect": "bundle"},
+]
+CATALOG_BY_ID = {c["id"]: c for c in CATALOG}
 
-async def ensure_indexes() -> None:
-    for collection, models in INDEXES.items():
-        for model in models:  # one at a time so a bad spec skips only itself
-            try:
-                await db[collection].create_indexes([model])
-            except Exception as exc:  # never block boot on an index; the log line names what to fix
-                logging.getLogger(__name__).error("ensure_indexes(%s.%s): %s", collection, model.document["name"], exc)
+SYSTEM_PROMPT = (
+    "You are BoomDrop, a fireworks stand for TikTok dancers in Phnom Penh. Build a Shot Kit for a 15 second video. "
+    "Use only items from the catalog. Stay within the budget. Put the biggest effect on the beat drop. "
+    "Return only JSON with: kit_name, song, drop_second, cues (array of 4 to 6 objects with second, item_id, effect, "
+    "placement_tip), filming_tip, cart (array of item_id, name, qty, price_usd), total_usd, total_khr.\n\n"
+    f"Catalog (id, name, price_usd, effect type):\n{json.dumps(CATALOG)}\n"
+    f"Convert USD to riel at {KHR_RATE} KHR per dollar. price_usd in cart is the unit price."
+)
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+class KitRequest(BaseModel):
+    request: str = Field(min_length=3, max_length=2000)
+
+
+class Cue(BaseModel):
+    second: float
+    item_id: int
+    item_name: str
+    effect: str
+    placement_tip: str
+
+
+class CartItem(BaseModel):
+    item_id: int
+    name: str
+    qty: int
+    price_usd: float
+    line_usd: float
+
+
+class ShotKit(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    request: str
+    kit_name: str
+    song: str
+    drop_second: float
+    cues: List[Cue]
+    filming_tip: str
+    cart: List[CartItem]
+    total_usd: float
+    total_khr: int
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+def parse_json(text: str) -> dict:
+    match = re.search(r"\{.*\}", text, re.S)
+    if not match:
+        raise ValueError("No JSON in model output")
+    return json.loads(match.group(0))
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks(limit: int = Query(20, ge=1, le=100)):
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+def build_kit(request: str, raw: dict) -> ShotKit:
+    cues = []
+    for c in raw.get("cues", []):
+        item = CATALOG_BY_ID.get(int(c.get("item_id", 0)))
+        if not item:
+            continue
+        sec = max(0.0, min(15.0, float(c.get("second", 0))))
+        cues.append(Cue(second=sec, item_id=item["id"], item_name=item["name"],
+                        effect=str(c.get("effect", item["effect"])), placement_tip=str(c.get("placement_tip", ""))))
+    cues.sort(key=lambda c: c.second)
+    cart = []
+    for line in raw.get("cart", []):
+        item = CATALOG_BY_ID.get(int(line.get("item_id", 0)))
+        qty = int(line.get("qty", 0))
+        if not item or qty <= 0:
+            continue
+        cart.append(CartItem(item_id=item["id"], name=item["name"], qty=qty, price_usd=item["price_usd"],
+                             line_usd=round(item["price_usd"] * qty, 2)))
+    if len(cues) < 1 or not cart:
+        raise ValueError("Kit missing cues or cart")
+    total = round(sum(c.line_usd for c in cart), 2)
+    return ShotKit(request=request, kit_name=str(raw.get("kit_name", "BoomDrop Kit")), song=str(raw.get("song", "")),
+                   drop_second=max(0.0, min(15.0, float(raw.get("drop_second", 8)))), cues=cues,
+                   filming_tip=str(raw.get("filming_tip", "")), cart=cart, total_usd=total,
+                   total_khr=int(round(total * KHR_RATE)))
 
-# Include the router in the main app
+
+@api_router.get("/catalog")
+async def get_catalog():
+    return {"rate_khr": KHR_RATE, "items": [{**c, "price_khr": int(c["price_usd"] * KHR_RATE)} for c in CATALOG]}
+
+
+@api_router.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    data = await audio.read()
+    if not data:
+        raise HTTPException(400, "Empty audio")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(413, "Audio too large")
+    buf = io.BytesIO(data)
+    buf.name = audio.filename or "speech.webm"
+    try:
+        stt = OpenAISpeechToText(api_key=LLM_KEY)
+        res = await stt.transcribe(file=buf, model="whisper-1", response_format="json", language="en",
+                                   prompt="A TikTok dancer ordering fireworks in Phnom Penh: dance, song, location, group size, budget in dollars.")
+    except Exception as e:
+        logger.exception("transcribe failed")
+        raise HTTPException(502, f"Transcription failed: {e}")
+    return {"text": res.text.strip()}
+
+
+@api_router.post("/shot-kit", response_model=ShotKit)
+async def create_shot_kit(body: KitRequest):
+    last_err = None
+    for _ in range(2):
+        chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT) \
+            .with_model("anthropic", "claude-sonnet-5-5")
+        try:
+            text = await chat.send_message(UserMessage(text=body.request))
+            kit = build_kit(body.request, parse_json(text))
+            await db.shot_kits.insert_one(kit.model_dump())
+            return kit
+        except Exception as e:
+            last_err = e
+            logger.warning("shot kit attempt failed: %s", e)
+    raise HTTPException(502, f"Could not build a Shot Kit: {last_err}")
+
+
 app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -97,20 +174,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("startup")
-async def start_index_build():
-    app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    app.state.index_task.cancel()  # stop a build still running before its client closes
-    with suppress(asyncio.CancelledError):
-        await app.state.index_task
     client.close()
