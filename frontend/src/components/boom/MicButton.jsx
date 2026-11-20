@@ -12,11 +12,17 @@ export const MicButton = ({ onTranscript, disabled, editMode, busy }) => {
   const recRef = useRef(null);
   const chunks = useRef([]);
   const startedAt = useRef(0);
+  const pressed = useRef(false);
 
   const start = async () => {
     if (state !== "idle" || disabled) return;
+    pressed.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!pressed.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return toast(t("holdWhile"));
+      }
       const rec = new MediaRecorder(stream);
       chunks.current = [];
       rec.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
@@ -34,6 +40,7 @@ export const MicButton = ({ onTranscript, disabled, editMode, busy }) => {
   };
 
   const stop = () => {
+    pressed.current = false;
     if (state !== "recording") return;
     setState("processing");
     recRef.current?.stop();

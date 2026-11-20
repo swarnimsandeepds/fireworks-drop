@@ -17,6 +17,8 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Reliability (retry once, then a fallback kit built from the catalog; never an error); You.com "Trending tonight" (backend/trends.py, 10-min cache, 4s timeout, house picks as fallback; YDC_API_KEY in backend .env), "Why this kit" sources; trimming keeps 4-6 cues and a drop cue (backend/kits.py plan_kit); MOCK KHQR checkout + /api/orders + spoken confirmation; copy for Willow/You.com/Emergent
 
+- 2026-06: Voice edits (POST /api/shot-kit/{id}/edit, change banner + highlights, delivery prefill), EN/Khmer toggle (lib/i18n.js, Khmer speech, Khmer read-aloud), share links (/?kit=id, Telegram, copy), record 9:16 preview clip (canvas + beat audio), The Stand: lazy 3D catalog with drei View, tilt and mini particle demos
+
 ## Backlog (from test report iteration 2)
 - P1: Enforce 4-6 cues and a drop cue after budget trimming; reconcile cue counts against cart quantities; cap the size of LLM-supplied quantities
 - P1: Pause/resume in the preview; the DROP label stays on screen when the drop is at 14-15s; the 9:16 frame is stretched on tall, narrow phones

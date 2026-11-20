@@ -30,6 +30,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   const t = useT();
   const frameRef = useRef();
   const [recording, setRecording] = useState(false);
+  const recRef = useRef(false);
   const mobile = useMemo(() => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4, []);
   const webgl = useMemo(hasWebGL, []);
   const beat = useMemo(() => (audioCtx ? createBeat(audioCtx) : null), [audioCtx]);
@@ -80,7 +81,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (e) => e.key === "Escape" && onClose();
+    const onKey = (e) => e.key === "Escape" && !recRef.current && onClose();
     window.addEventListener("keydown", onKey);
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
   }, [onClose]);
@@ -98,7 +99,9 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
     if (!canvas?.captureStream || !window.MediaRecorder) return toast.error(t("recordUnsupported"));
     pickMode("phone");
     setRecording(true);
-    setTimeout(() => requestAnimationFrame(() => {
+    recRef.current = true;
+    const fail = () => { recRef.current = false; setRecording(false); toast.error(t("recordUnsupported")); };
+    setTimeout(() => requestAnimationFrame(() => { try {
       const stream = canvas.captureStream(30);
       beat?.stream?.getAudioTracks().forEach((tr) => stream.addTrack(tr));
       const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
@@ -112,13 +115,15 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         a.download = `boomdrop-${kit.kit_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "kit"}.${type.includes("mp4") ? "mp4" : "webm"}`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        recRef.current = false;
         setRecording(false);
         toast.success(t("clipSaved"));
       };
+      rec.onerror = fail;
       replay(true);
       rec.start(500);
       setTimeout(() => rec.state !== "inactive" && rec.stop(), 15300);
-    }), 350);
+    } catch { fail(); } }), 350);
   };
   const pickMode = (m) => { autoCut.current = true; setMode(m); };
   const toggleMute = () => { beat?.setMuted(!muted); audioCtx?.resume(); setMuted(!muted); };

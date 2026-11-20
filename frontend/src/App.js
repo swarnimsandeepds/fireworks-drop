@@ -62,6 +62,7 @@ function App() {
     try {
       const { data } = await axios.post(`${API}/shot-kit`, { request: text.trim(), lang });
       setChanges(null);
+      setDelivery(null);
       setKit(data);
       setTimeout(() => document.getElementById("shot-kit")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
@@ -95,7 +96,7 @@ function App() {
         </section>
         <TrendingStrip onAdd={(c) => setText((cur) => (cur.trim() ? `${cur.trim().replace(/[.,]$/, "")}, ${c}` : c).slice(0, 2000))} />
         <MicButton onTranscript={onTranscript} disabled={loading || editing} editMode={!!kit} busy={editing} />
-        <RequestInput transcript={transcript} text={text} setText={setText} onSubmit={buildKit} loading={loading} />
+        <RequestInput transcript={transcript} text={text} setText={setText} onSubmit={buildKit} loading={loading || editing} />
         {kit && <ShotKitCard kit={kit} changes={changes} delivery={delivery} />}
       </main>
       <footer className="relative z-10 max-w-md mx-auto px-5 pb-10 text-center font-mono-bd text-[10px] uppercase tracking-widest text-slate-500" data-testid="app-footer">

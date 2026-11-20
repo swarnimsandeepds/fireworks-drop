@@ -33,8 +33,8 @@ TIPS = {
 }
 BUDGET_PATTERNS = [
     r"\$\s*(\d[\d,]*(?:\.\d+)?)",
-    r"(\d[\d,]*(?:\.\d+)?)\s*(?:usd|dollars?|bucks)\b",
-    r"budget\D{0,15}(\d[\d,]*(?:\.\d+)?)",
+    r"(\d[\d,]*(?:\.\d+)?)\s*(?:usd|dollars?|bucks|ដុល្លារ)",
+    r"(?:budget|ថវិកា)\D{0,15}(\d[\d,]*(?:\.\d+)?)",
 ]
 
 
@@ -42,9 +42,12 @@ def price(item_id: int) -> float:
     return CATALOG_BY_ID[item_id]["price_usd"]
 
 
+KHMER_DIGITS = str.maketrans("០១២៣៤៥៦៧៨៩", "0123456789")
+
+
 def parse_budget(text: str):
-    t = text.lower()
-    m = re.search(r"(\d[\d,]*)\s*(?:khr|riels?|៛)", t)
+    t = text.lower().translate(KHMER_DIGITS)
+    m = re.search(r"(\d[\d,]*)\s*(?:khr|riels?|៛|រៀល)", t)
     if m:
         return float(m.group(1).replace(",", "")) / KHR_RATE
     for pat in BUDGET_PATTERNS:
