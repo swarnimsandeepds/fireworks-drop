@@ -34,6 +34,12 @@ function Home({ lang }) {
       .catch(() => toast.error(STR.en.kitLoadFail));
   }, []);
   useEffect(() => {
+    if (!kit?.id) return;
+    const saved = JSON.parse(localStorage.getItem("boomdrop-kits") || "[]").filter((k) => k.id !== kit.id);
+    localStorage.setItem("boomdrop-kits", JSON.stringify([{ id: kit.id, name: kit.kit_name }, ...saved].slice(0, 10)));
+    window.dispatchEvent(new Event("boomdrop:kits"));
+  }, [kit?.id, kit?.kit_name]);
+  useEffect(() => {
     if (!changes) return;
     const id = setTimeout(() => setChanges(null), 9000);
     return () => clearTimeout(id);
@@ -128,15 +134,13 @@ export default function App() {
   return (
     <LangContext.Provider value={{ lang, setLang }}>
       <BrowserRouter>
-        <ClerkAuthProvider>
-          <Toaster theme="dark" position="top-center" />
-          <Routes>
-            <Route path="/" element={<Home lang={lang} />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/sign-in/*" element={<AuthPage><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" withSignUp /></AuthPage>} />
-            <Route path="/sign-up/*" element={<AuthPage><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthPage>} />
-          </Routes>
-        </ClerkAuthProvider>
+        <Toaster theme="dark" position="top-center" />
+        <Routes>
+          <Route path="/" element={<Home lang={lang} />} />
+          <Route path="/admin" element={<ClerkAuthProvider><AdminPage /></ClerkAuthProvider>} />
+          <Route path="/sign-in/*" element={<ClerkAuthProvider><AuthPage><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" withSignUp fallbackRedirectUrl="/admin" /></AuthPage></ClerkAuthProvider>} />
+          <Route path="/sign-up/*" element={<ClerkAuthProvider><AuthPage><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" fallbackRedirectUrl="/admin" /></AuthPage></ClerkAuthProvider>} />
+        </Routes>
       </BrowserRouter>
     </LangContext.Provider>
   );

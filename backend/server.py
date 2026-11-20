@@ -326,6 +326,7 @@ async def ensure_indexes():
         await db.clip_likes.create_index([("clip_id", 1), ("device_id", 1)], unique=True)
         await db.clip_likes.create_index("created_at")
         await db.users.create_index("user_id", unique=True)
+        await db.clips.update_many({"status": {"$exists": False}}, {"$set": {"status": "approved"}})
         await asyncio.to_thread(init_storage)
     except Exception as e:
         logger.error("index creation failed: %s", e)

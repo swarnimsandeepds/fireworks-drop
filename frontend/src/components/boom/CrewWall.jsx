@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { toast } from "sonner";
-import { Film, Music2, Heart, Upload, Loader2, Trophy, AlertTriangle } from "lucide-react";
+import { Film, Music2, Heart, Trophy, AlertTriangle, Sparkles, Crown } from "lucide-react";
+import { UploadShoot } from "@/components/boom/UploadShoot";
 import { API } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
@@ -12,6 +12,39 @@ const deviceId = () => {
     localStorage.setItem("boomdrop-device", id);
   }
   return id;
+};
+
+const KitLink = ({ id, testid }) => {
+  const t = useT();
+  return (
+    <a href={`/?kit=${id}`} data-testid={testid}
+      className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold text-[#FFD043] hover:text-white transition-colors">
+      <Sparkles className="w-3 h-3" /> {t("openKit")}
+    </a>
+  );
+};
+
+const ClipOfWeek = ({ c, onLike }) => {
+  const t = useT();
+  return (
+    <div className="mt-4 rounded-3xl overflow-hidden border border-[#FFD043]/50 bg-[#131728] shadow-[0_0_40px_rgba(255,208,67,0.15)]" data-testid="clip-of-week-banner">
+      <div className="flex items-center gap-1.5 px-3 py-2 font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]">
+        <Crown className="w-4 h-4" /> {t("clipOfWeek")}
+      </div>
+      <video src={`${API}/clips/${c.id}/video`} className="w-full aspect-[9/16] max-h-[70vh] object-cover bg-black" controls playsInline preload="metadata" data-testid="clip-of-week-video" />
+      <div className="p-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-display font-black text-lg text-white truncate" data-testid="clip-of-week-crew">{c.crew}</div>
+          {c.song && <div className="flex items-center gap-1 text-xs text-[#FF5E9F] truncate"><Music2 className="w-3 h-3 shrink-0" /> {c.song}</div>}
+          {c.kit_id && <KitLink id={c.kit_id} testid="clip-of-week-open-kit" />}
+        </div>
+        <button onClick={() => onLike(c)} disabled={c.liked} aria-label={t("like")} data-testid="clip-of-week-like"
+          className={`shrink-0 flex items-center gap-1 text-sm font-mono-bd transition-colors ${c.liked ? "text-[#FF2A85]" : "text-slate-300 hover:text-[#FF5E9F]"}`}>
+          <Heart className={`w-5 h-5 ${c.liked ? "fill-current" : ""}`} /> {c.week_likes}
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const ClipCard = ({ c, i, onLike }) => {
@@ -38,6 +71,7 @@ const ClipCard = ({ c, i, onLike }) => {
           </button>
         </div>
         {c.kit_name && <div className="text-[10px] text-slate-400 truncate">{c.kit_name}</div>}
+        {c.kit_id && <KitLink id={c.kit_id} testid={`crew-clip-open-kit-${i}`} />}
         {c.song && <div className="flex items-center gap-1 text-[10px] text-[#FF5E9F] truncate"><Music2 className="w-3 h-3 shrink-0" /> {c.song}</div>}
       </figcaption>
     </figure>
@@ -48,9 +82,6 @@ export const CrewWall = () => {
   const t = useT();
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
-  const [crew, setCrew] = useState("");
-  const [busy, setBusy] = useState(false);
-  const file = useRef();
 
   const load = useCallback(() => {
     axios.get(`${API}/clips`, { params: { device_id: deviceId() } })
@@ -65,31 +96,12 @@ export const CrewWall = () => {
   }, [load]);
 
   const like = async (c) => {
-    setData((d) => ({ ...d, clips: d.clips.map((x) => (x.id === c.id ? { ...x, liked: true, week_likes: x.week_likes + 1 } : x)) }));
+    const bump = (x) => (x.id === c.id ? { ...x, liked: true, week_likes: x.week_likes + 1 } : x);
+    setData((d) => ({ ...d, clips: d.clips.map(bump), clip_of_week: d.clip_of_week && bump(d.clip_of_week) }));
     try {
       await axios.post(`${API}/clips/${c.id}/like`, { device_id: deviceId() });
     } catch {
       load();
-    }
-  };
-
-  const upload = async (f) => {
-    if (!f) return;
-    if (f.size > 60 * 1024 * 1024) return toast.error(t("uploadFail"));
-    setBusy(true);
-    const fd = new FormData();
-    fd.append("video", f);
-    fd.append("crew", crew);
-    fd.append("source", "shoot");
-    try {
-      await axios.post(`${API}/clips`, fd, { timeout: 240000 });
-      toast.success(t("sentReview"));
-      setCrew("");
-    } catch {
-      toast.error(t("uploadFail"));
-    } finally {
-      setBusy(false);
-      if (file.current) file.current.value = "";
     }
   };
 
@@ -101,18 +113,9 @@ export const CrewWall = () => {
       </h2>
       <p className="text-sm text-slate-400 mt-1">{t("wallSub")}</p>
 
-      <div className="mt-4 rounded-2xl border border-[#FFD043]/30 bg-[#FFD043]/5 p-3" data-testid="upload-shoot-panel">
-        <div className="font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043] mb-2">{t("uploadShoot")}</div>
-        <div className="flex gap-2">
-          <input value={crew} onChange={(e) => setCrew(e.target.value.slice(0, 40))} placeholder={t("crewName")} data-testid="upload-shoot-crew-input"
-            className="flex-1 min-w-0 h-11 rounded-full bg-[#131728] border border-[#1E2640] px-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#FF2A85]" />
-          <input ref={file} type="file" accept="video/*" className="hidden" onChange={(e) => upload(e.target.files?.[0])} data-testid="upload-shoot-file-input" />
-          <button onClick={() => file.current?.click()} disabled={busy} data-testid="upload-shoot-btn"
-            className="h-11 px-4 rounded-full bg-[#FFD043] text-[#06070D] text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
-            {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> {t("uploading")}</> : <><Upload className="w-4 h-4" /> {t("pickVideo")}</>}
-          </button>
-        </div>
-      </div>
+      <UploadShoot />
+
+      {data?.clip_of_week && <ClipOfWeek c={data.clip_of_week} onLike={like} />}
 
       {data?.top_crews?.length > 0 && (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1" data-testid="top-crews-strip">

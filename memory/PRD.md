@@ -23,6 +23,8 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Kit locked at checkout, removed items remembered (kit.removed, banned in plan_kit), preview pause/resume, Crew Video Wall (object storage, /api/clips)
 
+- 2026-06: Shoot video uploads (ffmpeg transcode to H.264 MP4), Range streaming, weekly likes + top crews, admin clip moderation with Clerk sign-in (email+password, Google), roles (admin/member), /admin page
+
 ## Backlog (from test report iteration 2)
 - P1: Enforce 4-6 cues and a drop cue after budget trimming; reconcile cue counts against cart quantities; cap the size of LLM-supplied quantities
 - P1: Pause/resume in the preview; the DROP label stays on screen when the drop is at 14-15s; the 9:16 frame is stretched on tall, narrow phones

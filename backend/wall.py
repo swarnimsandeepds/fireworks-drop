@@ -25,6 +25,7 @@ RANK = {r: len(ROLES) - i for i, r in enumerate(ROLES)}
 ENV = "live" if os.environ.get("CLERK_PUBLISHABLE_KEY", "").startswith("pk_live_") else "preview"
 IN_ENV = {"env": {"$in": [ENV, None]}}
 _cache: "OrderedDict[str, bytes]" = OrderedDict()
+_admin_check: dict = {}
 
 
 def effective_role(role) -> str:
@@ -33,7 +34,7 @@ def effective_role(role) -> str:
 
 
 def _is_admin_email(user_id: str) -> bool:
-    admins = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
+    admins = admin_emails()
     r = requests.get(f"https://api.clerk.com/v1/users/{user_id}", timeout=10,
                      headers={"Authorization": f"Bearer {os.environ['CLERK_SECRET_KEY']}", "User-Agent": "emergent-app"})
     r.raise_for_status()
@@ -41,16 +42,29 @@ def _is_admin_email(user_id: str) -> bool:
                for e in r.json()["email_addresses"])
 
 
-def transcode(data: bytes) -> bytes:
+def admin_emails() -> set:
+    return {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
+
+
+def _allowlisted(user_id: str) -> bool:
+    hit = _admin_check.get(user_id)
+    if hit and hit[1] > datetime.now(timezone.utc).timestamp():
+        return hit[0]
+    ok = bool(admin_emails()) and _is_admin_email(user_id)
+    _admin_check[user_id] = (ok, datetime.now(timezone.utc).timestamp() + 300)
+    return ok
+
+
+def transcode(data: bytes, first_minute: bool) -> bytes:
     """Re-encode any phone video to H.264/AAC MP4 with faststart so it streams on iPhone and Android."""
     with tempfile.TemporaryDirectory() as d:
         src, out = os.path.join(d, "in"), os.path.join(d, "out.mp4")
         with open(src, "wb") as f:
             f.write(data)
-        cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", src, "-t", "60",
+        cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", src, *(["-t", "60"] if first_minute else []),
                "-vf", "scale=trunc(min(720\\,iw)/2)*2:-2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out]
-        subprocess.run(cmd, check=True, timeout=180, capture_output=True)
+        subprocess.run(cmd, check=True, timeout=900, capture_output=True)
         with open(out, "rb") as f:
             return f.read()
 
@@ -70,16 +84,16 @@ def build_wall_router(db, logger) -> APIRouter:
         uid = user["user_id"]
         member = await db.users.find_one({"user_id": uid}, {"_id": 0})
         if member is None or not member.get("role"):
-            if os.environ.get("ADMIN_EMAIL", "").strip():
-                role = "admin" if await asyncio.to_thread(_is_admin_email, uid) else DEFAULT_ROLE
-            else:
-                role = "admin" if not await db.users.count_documents({"role": "admin", **IN_ENV}) else DEFAULT_ROLE
+            role = "admin" if await asyncio.to_thread(_allowlisted, uid) else DEFAULT_ROLE
             await db.users.update_one({"user_id": uid, "role": {"$in": [None, ""]}}, {"$set": {"role": role}})
             member = await db.users.find_one_and_update({"user_id": uid}, {"$setOnInsert": {"user_id": uid, "role": role}},
                                                         upsert=True, projection={"_id": 0}, return_document=ReturnDocument.AFTER)
         if member.get("env") != ENV:
             await db.users.update_one({"user_id": uid}, {"$set": {"env": ENV}})
-        return {**member, "env": ENV, "role": effective_role(member["role"])}
+        role = "admin" if await asyncio.to_thread(_allowlisted, uid) else DEFAULT_ROLE
+        if member["role"] != role:
+            await db.users.update_one({"user_id": uid}, {"$set": {"role": role}})
+        return {**member, "env": ENV, "role": role}
 
     def require_role(*roles: str):
         async def check(member: dict = Depends(current_member)) -> dict:
@@ -100,6 +114,8 @@ def build_wall_router(db, logger) -> APIRouter:
 
     @r.patch("/users/{user_id}/role")
     async def set_role(user_id: str, body: RoleIn, admin: dict = Depends(require_role("admin"))):
+        if body.role == "admin":
+            raise HTTPException(status_code=403, detail="Admins are set by email only")
         if body.role not in ROLES or RANK[body.role] > RANK[admin["role"]]:
             raise HTTPException(status_code=403, detail="Not allowed")
         target = await db.users.find_one({"user_id": user_id, **IN_ENV}, {"_id": 0})
@@ -113,7 +129,7 @@ def build_wall_router(db, logger) -> APIRouter:
 
     @r.post("/clips")
     async def upload_clip(video: UploadFile = File(...), kit_id: Optional[str] = Form(None), crew: str = Form(""),
-                          source: str = Form("preview")):
+                          source: str = Form("preview"), keep: str = Form("full")):
         data = await video.read(MAX_UPLOAD + 1)
         if not data or not (video.content_type or "").startswith("video/"):
             raise HTTPException(400, "Upload a video file")
@@ -123,7 +139,7 @@ def build_wall_router(db, logger) -> APIRouter:
         if kit_id and not kit:
             raise HTTPException(404, "Kit not found")
         try:
-            mp4 = await asyncio.to_thread(transcode, data)
+            mp4 = await asyncio.to_thread(transcode, data, keep == "first_minute")
         except Exception as e:
             logger.warning("transcode failed: %s", e)
             raise HTTPException(400, "That file isn't a playable video")
@@ -148,7 +164,7 @@ def build_wall_router(db, logger) -> APIRouter:
 
     @r.get("/clips")
     async def list_clips(device_id: str = ""):
-        clips = await db.clips.find({"is_deleted": False, "status": "approved"}, {"_id": 0, "storage_path": 0}).to_list(500)
+        clips = await db.clips.find({"is_deleted": False, "status": "approved"}, {"_id": 0, "storage_path": 0, "reviewed_by": 0}).to_list(500)
         wl = await week_likes()
         liked = set()
         if device_id:
@@ -161,7 +177,8 @@ def build_wall_router(db, logger) -> APIRouter:
         for c in clips:
             crews[c["crew"]] = crews.get(c["crew"], 0) + c["week_likes"]
         top = sorted(({"crew": k, "likes": v} for k, v in crews.items() if v > 0), key=lambda x: -x["likes"])[:3]
-        return {"clips": clips[:60], "top_crews": top}
+        star = next((c for c in clips if c["week_likes"] > 0), None)
+        return {"clips": clips[:60], "top_crews": top, "clip_of_week": star}
 
     @r.post("/clips/{clip_id}/like")
     async def like_clip(clip_id: str, body: LikeIn):
@@ -184,11 +201,11 @@ def build_wall_router(db, logger) -> APIRouter:
             _cache.popitem(last=False)
         return data
 
-    async def serve(doc: dict, request: Request) -> Response:
+    async def serve(doc: dict, request: Request, private: bool = False) -> Response:
         data = await clip_bytes(doc)
         size = len(data)
         rng = request.headers.get("range", "")
-        headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400"}
+        headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, no-store" if private else "public, max-age=86400"}
         if rng.startswith("bytes="):
             start_s, _, end_s = rng[6:].split(",")[0].partition("-")
             if start_s:
@@ -217,18 +234,19 @@ def build_wall_router(db, logger) -> APIRouter:
         doc = await db.clips.find_one({"id": clip_id, "is_deleted": False}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Clip not found")
-        return await serve(doc, request)
+        return await serve(doc, request, private=True)
 
     @r.post("/admin/clips/{clip_id}/{action}")
     async def moderate(clip_id: str, action: str, admin: dict = Depends(require_role("admin"))):
         status = {"approve": "approved", "reject": "rejected"}.get(action)
         if not status:
             raise HTTPException(404, "Unknown action")
-        res = await db.clips.update_one({"id": clip_id, "is_deleted": False},
+        allowed = ["pending"] if status == "approved" else ["pending", "approved"]
+        res = await db.clips.update_one({"id": clip_id, "is_deleted": False, "status": {"$in": allowed}},
                                         {"$set": {"status": status, "reviewed_by": admin["user_id"],
                                                   "reviewed_at": datetime.now(timezone.utc).isoformat()}})
         if not res.matched_count:
-            raise HTTPException(404, "Clip not found")
+            raise HTTPException(409, "That clip was already reviewed")
         return {"id": clip_id, "status": status}
 
     return r
