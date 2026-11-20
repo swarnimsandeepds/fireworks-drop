@@ -1,6 +1,8 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Volume2, VolumeX, Move3d } from "lucide-react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
+import { useT } from "@/lib/i18n";
 import { createBeat } from "./audio";
 import Fallback2D from "./Fallback2D";
 import { TikTokOverlay } from "./TikTokOverlay";
@@ -25,6 +27,9 @@ class GLBoundary extends Component {
 }
 
 export default function ShotPreview({ kit, audioCtx, onClose }) {
+  const t = useT();
+  const frameRef = useRef();
+  const [recording, setRecording] = useState(false);
   const mobile = useMemo(() => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4, []);
   const webgl = useMemo(hasWebGL, []);
   const beat = useMemo(() => (audioCtx ? createBeat(audioCtx) : null), [audioCtx]);
@@ -80,13 +85,40 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
   }, [onClose]);
 
-  const replay = () => {
+  const replay = (keepPhone) => {
     start.current = performance.now();
-    autoCut.current = false;
-    setMode("stage");
+    autoCut.current = keepPhone === true;
+    if (keepPhone !== true) setMode("stage");
     setRunId((r) => r + 1);
     audioCtx?.resume();
     beat?.play(drop);
+  };
+  const record = () => {
+    const canvas = frameRef.current?.querySelector("canvas");
+    if (!canvas?.captureStream || !window.MediaRecorder) return toast.error(t("recordUnsupported"));
+    pickMode("phone");
+    setRecording(true);
+    setTimeout(() => requestAnimationFrame(() => {
+      const stream = canvas.captureStream(30);
+      beat?.stream?.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+      const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const chunks = [];
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      rec.onstop = () => {
+        const type = rec.mimeType || "video/webm";
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob(chunks, { type }));
+        a.download = `boomdrop-${kit.kit_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "kit"}.${type.includes("mp4") ? "mp4" : "webm"}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        setRecording(false);
+        toast.success(t("clipSaved"));
+      };
+      replay(true);
+      rec.start(500);
+      setTimeout(() => rec.state !== "inactive" && rec.stop(), 15300);
+    }), 350);
   };
   const pickMode = (m) => { autoCut.current = true; setMode(m); };
   const toggleMute = () => { beat?.setMuted(!muted); audioCtx?.resume(); setMuted(!muted); };
@@ -96,11 +128,11 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-50 bg-[#06070D] flex flex-col" data-testid="shot-preview-overlay">
       <div className="h-14 shrink-0 px-3 flex items-center gap-2 border-b border-white/10 bg-[#0D0F1A]/95">
-        <button onClick={onClose} aria-label="Close preview" data-testid="preview-close-btn" className="w-10 h-10 grid place-items-center rounded-full hover:bg-white/10 transition-colors">
+        <button onClick={onClose} aria-label="Close preview" data-testid="preview-close-btn" disabled={recording} className="w-10 h-10 grid place-items-center rounded-full hover:bg-white/10 transition-colors">
           <X className="w-5 h-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]">Shot preview</div>
+          <div className="font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]">{t("shotPreview")}</div>
           <div className="font-display font-bold text-sm truncate">{kit.kit_name}</div>
         </div>
         <button onClick={toggleMute} aria-label="Toggle sound" data-testid="preview-mute-btn" className="w-10 h-10 grid place-items-center rounded-full hover:bg-white/10 transition-colors">
@@ -110,6 +142,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
 
       <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden p-0" data-testid="preview-stage-area">
         <div
+          ref={frameRef}
           data-testid={`preview-frame-${mode}`}
           className={mode === "phone"
             ? "relative h-[calc(100%-16px)] max-w-full aspect-[9/16] rounded-[28px] border-[5px] border-[#1E2640] overflow-hidden shadow-[0_0_40px_rgba(255,42,133,0.35)]"
@@ -117,7 +150,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         >
           {webgl ? (
             <GLBoundary fallback={<Fallback2D kit={kit} getTime={getTime} runId={runId} onMount={onReady} />}>
-              <Suspense fallback={<div className="w-full h-full grid place-items-center font-mono-bd text-xs text-slate-400">Loading stage…</div>}>
+              <Suspense fallback={<div className="w-full h-full grid place-items-center font-mono-bd text-xs text-slate-400">{t("loadingStage")}</div>}>
                 <Scene3D kit={kit} getTime={getTime} runId={runId} mode={mode} mobile={mobile} onReady={onReady} />
               </Suspense>
             </GLBoundary>
@@ -126,7 +159,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         </div>
         {mode === "stage" && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0D0F1A]/80 backdrop-blur-md text-[11px] text-slate-300 pointer-events-none">
-            <Move3d className="w-3.5 h-3.5" /> Drag to orbit
+            <Move3d className="w-3.5 h-3.5" /> {t("dragOrbit")}
           </div>
         )}
         {dropOn && (
@@ -136,7 +169,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         )}
       </div>
 
-      <PreviewControls kit={kit} sec={sec} barRef={barRef} mode={mode} onMode={pickMode} onReplay={replay} done={done} />
+      <PreviewControls kit={kit} sec={sec} barRef={barRef} mode={mode} onMode={pickMode} onReplay={replay} done={done} onRecord={record} recording={recording} />
     </div>,
     document.body
   );

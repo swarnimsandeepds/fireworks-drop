@@ -1,25 +1,24 @@
 import { Loader2, Zap, AudioLines } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
-const PRESETS = [
-  "5 of us at Koh Pich, dancing to APT. by Rosé & Bruno Mars, $35 budget",
-  "Solo shuffle on Riverside to a phonk beat, $15 budget",
-  "Couple dance at Independence Monument to Die With A Smile, $20",
-];
 
-export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) => (
+export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) => {
+  const t = useT();
+  const PRESETS = t("presets");
+  return (
   <section className="space-y-4 rise" style={{ animationDelay: "0.2s" }}>
     {transcript && (
       <div className="rounded-2xl border border-[#FF2A85]/40 bg-[#FF2A85]/10 p-4" data-testid="voice-transcript-display">
         <div className="flex items-center gap-1.5 font-mono-bd text-[10px] uppercase tracking-widest text-[#FF5E9F] mb-1.5">
-          <AudioLines className="w-3.5 h-3.5" /> You said
+          <AudioLines className="w-3.5 h-3.5" /> {t("youSaid")}
         </div>
         <p className="text-sm text-white leading-relaxed">“{transcript}”</p>
       </div>
     )}
     <div>
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor="req" className="font-mono-bd text-[10px] uppercase tracking-widest text-slate-400">Or type it</label>
-        <span className="text-[11px] text-[#FFD043]/80" data-testid="willow-hint">Tip: dictate your order with Willow</span>
+        <label htmlFor="req" className="font-mono-bd text-[10px] uppercase tracking-widest text-slate-400">{t("orType")}</label>
+        <span className="text-[11px] text-[#FFD043]/80" data-testid="willow-hint">{t("willow")}</span>
       </div>
       <textarea
         id="req"
@@ -28,7 +27,7 @@ export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) =
         onChange={(e) => setText(e.target.value)}
         rows={4}
         maxLength={2000}
-        placeholder="e.g. 4 dancers at Koh Pich, Espresso by Sabrina Carpenter, drop at 8s, $25 budget"
+        placeholder={t("placeholder")}
         className="mt-1.5 w-full rounded-2xl bg-[#131728] border border-[#1E2640] p-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#FF2A85] focus:ring-2 focus:ring-[#FF2A85]/30 transition-colors resize-none"
       />
       <div className="flex gap-2 overflow-x-auto pb-1 mt-2 -mx-1 px-1">
@@ -39,7 +38,7 @@ export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) =
             onClick={() => setText(p)}
             className="shrink-0 text-xs px-3 py-2 rounded-full border border-white/10 bg-white/5 text-slate-300 hover:border-[#FFD043]/50 hover:text-[#FFD043] transition-colors"
           >
-            {p.split(",")[0]}
+            {p.split(/[,،]| ថវិកា/)[0]}
           </button>
         ))}
       </div>
@@ -50,7 +49,8 @@ export const RequestInput = ({ transcript, text, setText, onSubmit, loading }) =
       disabled={loading}
       className="w-full h-14 rounded-full bg-[#FFD043] text-[#06070D] font-display font-black text-base uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_28px_rgba(255,208,67,0.45)] hover:bg-[#FFE07D] active:scale-[0.98] transition-[background-color,transform] disabled:opacity-70"
     >
-      {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> Building your kit…</> : <><Zap className="w-5 h-5" /> Build Shot Kit</>}
+      {loading ? <><Loader2 className="w-5 h-5 animate-spin" /> {t("building")}</> : <><Zap className="w-5 h-5" /> {t("build")}</>}
     </button>
   </section>
-);
+  );
+};

@@ -101,6 +101,11 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
     others = sorted(others, key=lambda c: -price(c["item_id"]))[:5]
     extra = {i: min(q, MAX_QTY) for i, q in extra.items() if q > 0}
 
+    while len(others) < 3:
+        rest = None if budget is None else budget - _cost([drop_cue] + others, extra)
+        fits = [i for i in (9, 7, 1, 6) if rest is None or price(i) <= rest]
+        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else 6))
+
     if budget is not None:
         def over():
             return _cost([drop_cue] + others, extra) > budget + 1e-9
@@ -123,11 +128,6 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
                 break
             _swap(drop_cue, new)
 
-    while len(others) < 3:
-        rest = None if budget is None else budget - _cost([drop_cue] + others, extra)
-        fits = [i for i in (9, 7, 1, 6) if rest is None or price(i) <= rest]
-        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else 6))
-
     final = sorted([drop_cue] + others, key=lambda c: c["second"])
     qty = dict(extra)
     for c in final:
@@ -138,7 +138,8 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
 def fallback_raw(request: str, trends: dict) -> dict:
     drop = parse_drop(request) or 8.0
     sounds = trends.get("sounds") or []
-    song = f"{sounds[0]['title']}" if sounds else SONG_FALLBACK
+    named = [x["title"] for x in sounds if x["title"].lower().strip(" .") in request.lower()]
+    song = named[0] if named else SONG_FALLBACK
     seconds = [0.5, max(1.0, drop - 4), drop, min(14.5, drop + 2), 14.0 if drop < 12 else 1.5]
     items = [1, 4, 11, 6, 9]
     return {

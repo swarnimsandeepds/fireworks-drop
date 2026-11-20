@@ -1,9 +1,12 @@
 import { Search, ExternalLink } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
-export const WhyThisKit = ({ kit }) => (
+export const WhyThisKit = ({ kit }) => {
+  const t = useT();
+  return (
   <section className="mx-5 mb-5 rounded-2xl border border-white/10 bg-[#0D0F1A] p-4" data-testid="why-this-kit">
     <div className="flex items-center gap-1.5 font-mono-bd text-[10px] uppercase tracking-widest text-[#FF5E9F] mb-2">
-      <Search className="w-3.5 h-3.5" /> Why this kit
+      <Search className="w-3.5 h-3.5" /> {t("why")}
     </div>
     {kit.sources?.length ? (
       <ul className="space-y-1.5">
@@ -22,9 +25,10 @@ export const WhyThisKit = ({ kit }) => (
         ))}
       </ul>
     ) : (
-      <p className="text-sm text-slate-400">Built from tonight's BoomDrop house picks while live search catches up.</p>
+      <p className="text-sm text-slate-400">{t("whyFallback")}</p>
     )}
-    {kit.fallback && <p className="text-xs text-slate-500 mt-2" data-testid="fallback-kit-note">Quick-built from our catalog to keep you on schedule.</p>}
-    <p className="font-mono-bd text-[10px] text-slate-500 mt-3" data-testid="you-com-label">Built from live search, powered by You.com</p>
+    {kit.fallback && <p className="text-xs text-slate-500 mt-2" data-testid="fallback-kit-note">{t("quickBuilt")}</p>}
+    <p className="font-mono-bd text-[10px] text-slate-500 mt-3" data-testid="you-com-label">{t("poweredBy")}</p>
   </section>
-);
+  );
+};

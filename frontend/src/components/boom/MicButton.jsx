@@ -3,8 +3,11 @@ import axios from "axios";
 import { Mic, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { API } from "@/lib/api";
+import { useLang, useT } from "@/lib/i18n";
 
-export const MicButton = ({ onTranscript, disabled }) => {
+export const MicButton = ({ onTranscript, disabled, editMode, busy }) => {
+  const t = useT();
+  const { lang } = useLang();
   const [state, setState] = useState("idle");
   const recRef = useRef(null);
   const chunks = useRef([]);
@@ -26,7 +29,7 @@ export const MicButton = ({ onTranscript, disabled }) => {
       startedAt.current = Date.now();
       setState("recording");
     } catch {
-      toast.error("Mic blocked. Type your request below instead.");
+      toast.error(t("micBlocked"));
     }
   };
 
@@ -39,23 +42,24 @@ export const MicButton = ({ onTranscript, disabled }) => {
   const upload = async (blob, mime) => {
     if (Date.now() - startedAt.current < 700) {
       setState("idle");
-      return toast("Hold the button while you talk.");
+      return toast(t("holdWhile"));
     }
     const ext = (mime || "").includes("mp4") ? "mp4" : "webm";
     const fd = new FormData();
     fd.append("audio", blob, `speech.${ext}`);
+    fd.append("language", lang);
     try {
       const { data } = await axios.post(`${API}/transcribe`, fd);
-      if (!data.text) toast("Didn't catch that. Try again.");
+      if (!data.text) toast(t("noCatch"));
       else onTranscript(data.text);
     } catch {
-      toast.error("Couldn't transcribe. Try again or type it.");
+      toast.error(t("sttFail"));
     } finally {
       setState("idle");
     }
   };
 
-  const label = { idle: "Hold to talk", recording: "Listening… release to send", processing: "Transcribing…" }[state];
+  const label = busy ? t("editing") : { idle: t(editMode ? "holdEdit" : "holdTalk"), recording: t("listening"), processing: t("transcribing") }[state];
 
   return (
     <section className="flex flex-col items-center py-6 rise" style={{ animationDelay: "0.1s" }}>
@@ -85,6 +89,7 @@ export const MicButton = ({ onTranscript, disabled }) => {
         </button>
       </div>
       <p className="mt-5 font-mono-bd text-xs uppercase tracking-widest text-slate-300" data-testid="mic-status">{label}</p>
+      {editMode && state === "idle" && !busy && <p className="mt-2 text-[11px] text-slate-500 text-center max-w-xs" data-testid="mic-edit-hint">{t("editHint")}</p>}
     </section>
   );
 };

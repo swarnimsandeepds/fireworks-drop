@@ -1,3 +1,5 @@
+import { useT } from "@/lib/i18n";
+
 const fmt = (s) => `0:${String(Math.round(s)).padStart(2, "0")}`;
 
 const Timeline = ({ cues, drop }) => (
@@ -15,15 +17,19 @@ const Timeline = ({ cues, drop }) => (
   </div>
 );
 
-export const CueList = ({ cues, drop }) => (
+export const CueList = ({ cues, drop, prev }) => {
+  const t = useT();
+  const prevKeys = prev ? new Set(prev.cues.map((c) => `${c.item_id}@${c.second}`)) : null;
+  return (
   <section className="p-5">
-    <h3 className="font-display font-bold text-lg mb-4">Cue sheet</h3>
+    <h3 className="font-display font-bold text-lg mb-4">{t("cueSheet")}</h3>
     <Timeline cues={cues} drop={drop} />
     <ol className="relative border-l border-[#1E2640] ml-3 space-y-5">
       {cues.map((c, i) => {
         const isDrop = Math.abs(c.second - drop) < 0.6;
+        const isNew = prevKeys && !prevKeys.has(`${c.item_id}@${c.second}`);
         return (
-          <li key={i} className="pl-6 relative" data-testid={`cue-timeline-item-${i}`}>
+          <li key={i} className={`pl-6 relative rounded-xl transition-colors ${isNew ? "bg-[#FFD043]/10 ring-1 ring-[#FFD043]/50 py-1" : ""}`} data-testid={`cue-timeline-item-${i}`}>
             <span
               className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 ${
                 isDrop ? "bg-[#FFD043] border-[#FFD043] shadow-[0_0_14px_rgba(255,208,67,0.9)]" : "bg-[#06070D] border-[#FF2A85]"
@@ -31,7 +37,8 @@ export const CueList = ({ cues, drop }) => (
             />
             <div className="flex items-center gap-2">
               <span className={`font-mono-bd font-bold text-xs ${isDrop ? "text-[#FFD043]" : "text-[#FF5E9F]"}`}>{fmt(c.second)}</span>
-              {isDrop && <span className="font-mono-bd text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FFD043] text-[#06070D] font-bold">Drop</span>}
+              {isDrop && <span className="font-mono-bd text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FFD043] text-[#06070D] font-bold">{t("drop")}</span>}
+              {isNew && <span className="font-mono-bd text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FF2A85] text-white font-bold" data-testid={`cue-new-tag-${i}`}>{t("newTag")}</span>}
             </div>
             <div className="text-sm font-semibold text-white mt-0.5">{c.item_name}</div>
             <div className="text-xs text-[#FF5E9F] capitalize">{c.effect}</div>
@@ -41,4 +48,5 @@ export const CueList = ({ cues, drop }) => (
       })}
     </ol>
   </section>
-);
+  );
+};

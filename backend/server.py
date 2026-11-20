@@ -7,10 +7,10 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
@@ -46,6 +46,16 @@ api_router = APIRouter(prefix="/api")
 
 class KitRequest(BaseModel):
     request: str = Field(min_length=3, max_length=2000)
+    lang: str = "en"
+
+
+class EditRequest(BaseModel):
+    command: str = Field(min_length=2, max_length=1000)
+    lang: str = "en"
+
+
+def lang_note(lang: str) -> str:
+    return "\nWrite kit_name, every effect, placement_tip, filming_tip and changes in Khmer script. Keep the song title as is." if lang == "km" else ""
 
 
 class Cue(BaseModel):
@@ -70,11 +80,13 @@ class Source(BaseModel):
     url: str
 
 
+SPOTS = ["Riverside", "Koh Pich", "Wat Phnom", "Independence Monument", "Night Market"]
+
+
 class OrderRequest(BaseModel):
     kit_id: str
-    spot: str = Field(min_length=2, max_length=60)
-    time: str = Field(min_length=3, max_length=20)
-    total_usd: float
+    spot: str
+    time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 class ShotKit(BaseModel):
@@ -90,6 +102,7 @@ class ShotKit(BaseModel):
     total_khr: int
     sources: List["Source"] = []
     live_trends: bool = False
+    budget_usd: Optional[float] = None
     fallback: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -101,7 +114,7 @@ def parse_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def build_kit(request: str, raw: dict, trends: dict) -> ShotKit:
+def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float]) -> ShotKit:
     cues = []
     for c in raw.get("cues", []):
         item = CATALOG_BY_ID.get(int(c.get("item_id", 0)))
@@ -121,7 +134,7 @@ def build_kit(request: str, raw: dict, trends: dict) -> ShotKit:
         usage[c["item_id"]] = usage.get(c["item_id"], 0) + 1
     extra = {i: q - usage.get(i, 0) for i, q in asked.items() if q > usage.get(i, 0)}
     drop = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
-    planned, qty = plan_kit(cues, extra, drop, parse_budget(request))
+    planned, qty = plan_kit(cues, extra, drop, budget)
     cue_models = [Cue(second=c["second"], item_id=c["item_id"], item_name=CATALOG_BY_ID[c["item_id"]]["name"], effect=c["effect"],
                       effect_type=CATALOG_BY_ID[c["item_id"]]["effect"], placement_tip=c["placement_tip"]) for c in planned]
     cart = [CartItem(item_id=i, name=CATALOG_BY_ID[i]["name"], qty=q, price_usd=CATALOG_BY_ID[i]["price_usd"],
@@ -130,7 +143,7 @@ def build_kit(request: str, raw: dict, trends: dict) -> ShotKit:
     return ShotKit(request=request, kit_name=str(raw.get("kit_name") or "BoomDrop Kit")[:80], song=clean_song(raw.get("song")),
                    drop_second=drop, cues=cue_models, filming_tip=str(raw.get("filming_tip") or ""), cart=cart,
                    total_usd=total, total_khr=int(round(total * KHR_RATE)),
-                   sources=[Source(**x) for x in trends.get("sources", [])[:3]], live_trends=trends.get("live", False))
+                   sources=[Source(**x) for x in trends.get("sources", [])[:3]], live_trends=trends.get("live", False), budget_usd=budget)
 
 
 @api_router.get("/catalog")
@@ -138,8 +151,14 @@ async def get_catalog():
     return {"rate_khr": KHR_RATE, "items": [{**c, "price_khr": int(c["price_usd"] * KHR_RATE)} for c in CATALOG]}
 
 
+STT_PROMPTS = {
+    "en": "A TikTok dancer ordering fireworks in Phnom Penh: dance, song, location, group size, budget in dollars.",
+    "km": "អ្នករាំ TikTok កុម្ម៉ង់កាំជ្រួចនៅភ្នំពេញ៖ ការរាំ បទចម្រៀង ទីតាំង ចំនួនមនុស្ស និងថវិកា។",
+}
+
+
 @api_router.post("/transcribe")
-async def transcribe(audio: UploadFile = File(...)):
+async def transcribe(audio: UploadFile = File(...), language: str = Form("en")):
     data = await audio.read()
     if not data:
         raise HTTPException(400, "Empty audio")
@@ -149,8 +168,8 @@ async def transcribe(audio: UploadFile = File(...)):
     buf.name = audio.filename or "speech.webm"
     try:
         stt = OpenAISpeechToText(api_key=LLM_KEY)
-        res = await stt.transcribe(file=buf, model="whisper-1", response_format="json", language="en",
-                                   prompt="A TikTok dancer ordering fireworks in Phnom Penh: dance, song, location, group size, budget in dollars.")
+        res = await stt.transcribe(file=buf, model="whisper-1", response_format="json", language="km" if language == "km" else "en",
+                                   prompt=STT_PROMPTS["km" if language == "km" else "en"])
     except Exception as e:
         logger.exception("transcribe failed")
         raise HTTPException(502, f"Transcription failed: {e}")
@@ -163,11 +182,11 @@ async def trends():
     return data
 
 
-async def _llm_kit(request: str, trends_data: dict) -> ShotKit:
-    chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT) \
+async def _llm_kit(request: str, trends_data: dict, lang: str) -> ShotKit:
+    chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT + lang_note(lang)) \
         .with_model("anthropic", "claude-sonnet-5-5")
     text = await asyncio.wait_for(chat.send_message(UserMessage(text=request + trends_prompt(trends_data))), 60)
-    return build_kit(request, parse_json(text), trends_data)
+    return build_kit(request, parse_json(text), trends_data, parse_budget(request))
 
 
 @api_router.post("/shot-kit", response_model=ShotKit)
@@ -176,12 +195,12 @@ async def create_shot_kit(body: KitRequest):
     kit = None
     for attempt in range(2):
         try:
-            kit = await _llm_kit(body.request, trends_data)
+            kit = await _llm_kit(body.request, trends_data, body.lang)
             break
         except Exception as e:
             logger.warning("shot kit attempt %d failed: %s", attempt + 1, e)
     if kit is None:
-        kit = build_kit(body.request, fallback_raw(body.request, trends_data), trends_data)
+        kit = build_kit(body.request, fallback_raw(body.request, trends_data), trends_data, parse_budget(body.request))
         kit.fallback = True
     try:
         await db.shot_kits.insert_one(kit.model_dump())
@@ -190,10 +209,74 @@ async def create_shot_kit(body: KitRequest):
     return kit
 
 
+EDIT_PROMPT = (
+    "You are BoomDrop, a fireworks stand for TikTok dancers in Phnom Penh. You edit an existing 15 second Shot Kit from a dancer's "
+    "voice command. Use only catalog items. Keep 4 to 6 cues and keep the biggest effect on the beat drop. The dancer may add or "
+    "remove items, change the budget, or set the delivery place and time. Keep everything the command does not change. "
+    "Return only JSON with: kit_name, song, drop_second, cues (array of second, item_id, effect, placement_tip), filming_tip, "
+    "cart (array of item_id, qty), budget_usd (new budget in US dollars at 4000 riel per dollar, or null if not mentioned), "
+    f"delivery (object with spot as one of {json.dumps(SPOTS)} or null, and time as HH:MM 24h or null), "
+    "changes (1 to 4 very short phrases saying what changed).\n\n"
+    f"Catalog (id, name, price_usd, effect type):\n{json.dumps(CATALOG)}"
+)
+
+
+def clean_delivery(d) -> Optional[dict]:
+    if not isinstance(d, dict):
+        return None
+    spot = d.get("spot") if d.get("spot") in SPOTS else None
+    time_ = d.get("time") if isinstance(d.get("time"), str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", d["time"]) else None
+    return {"spot": spot, "time": time_} if spot or time_ else None
+
+
+@api_router.get("/shot-kit/{kit_id}", response_model=ShotKit)
+async def get_shot_kit(kit_id: str):
+    doc = await db.shot_kits.find_one({"id": kit_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Kit not found")
+    return ShotKit(**doc)
+
+
+@api_router.post("/shot-kit/{kit_id}/edit")
+async def edit_shot_kit(kit_id: str, body: EditRequest):
+    doc = await db.shot_kits.find_one({"id": kit_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Kit not found")
+    current = ShotKit(**doc)
+    snapshot = {
+        "kit_name": current.kit_name, "song": current.song, "drop_second": current.drop_second, "filming_tip": current.filming_tip,
+        "cues": [{"second": c.second, "item_id": c.item_id, "effect": c.effect, "placement_tip": c.placement_tip} for c in current.cues],
+        "cart": [{"item_id": c.item_id, "qty": c.qty} for c in current.cart], "budget_usd": current.budget_usd,
+    }
+    trends_data = {"sources": [x.model_dump() for x in current.sources], "live": current.live_trends}
+    for attempt in range(2):
+        try:
+            chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=EDIT_PROMPT + lang_note(body.lang)) \
+                .with_model("anthropic", "claude-sonnet-5-5")
+            text = await asyncio.wait_for(chat.send_message(UserMessage(
+                text=f"Current kit:\n{json.dumps(snapshot)}\n\nVoice command: {body.command}")), 60)
+            raw = parse_json(text)
+            b = raw.get("budget_usd")
+            budget = float(b) if isinstance(b, (int, float)) and b > 0 else (parse_budget(body.command) or current.budget_usd)
+            kit = build_kit(current.request, raw, trends_data, budget)
+            await db.shot_kits.insert_one(kit.model_dump())
+            changes = [str(c)[:90] for c in raw.get("changes") or []][:4]
+            return {"kit": kit.model_dump(), "changes": changes, "delivery": clean_delivery(raw.get("delivery")), "applied": True}
+        except Exception as e:
+            logger.warning("kit edit attempt %d failed: %s", attempt + 1, e)
+    return {"kit": current.model_dump(), "changes": [], "delivery": None, "applied": False}
+
+
 @api_router.post("/orders")
 async def create_order(body: OrderRequest):
-    order = {"order_no": f"BD-{uuid.uuid4().hex[:6].upper()}", **body.model_dump(),
-             "total_khr": int(round(body.total_usd * KHR_RATE)), "created_at": datetime.now(timezone.utc).isoformat()}
+    if body.spot not in SPOTS:
+        raise HTTPException(422, "Unknown delivery spot")
+    kit = await db.shot_kits.find_one({"id": body.kit_id}, {"_id": 0})
+    if not kit:
+        raise HTTPException(404, "Kit not found")
+    order = {"order_no": f"BD-{uuid.uuid4().hex[:8].upper()}", "kit_id": body.kit_id, "spot": body.spot, "time": body.time,
+             "cart": kit["cart"], "total_usd": kit["total_usd"], "total_khr": kit["total_khr"],
+             "payment": "mock_paid", "status": "packed", "created_at": datetime.now(timezone.utc).isoformat()}
     await db.orders.insert_one(dict(order))
     return order
 
@@ -206,6 +289,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    try:
+        await db.shot_kits.create_index("id", unique=True)
+        await db.orders.create_index("order_no", unique=True)
+    except Exception as e:
+        logger.error("index creation failed: %s", e)
 
 
 @app.on_event("shutdown")

@@ -1,8 +1,11 @@
-import { RotateCcw, Smartphone, Clapperboard } from "lucide-react";
+import { RotateCcw, Smartphone, Clapperboard, Video, Circle } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 const fmt = (s) => `0:${String(s).padStart(2, "0")}`;
 
-export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done }) => (
+export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done, onRecord, recording }) => {
+  const t = useT();
+  return (
   <div className="shrink-0 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] space-y-3 bg-[#0D0F1A]/95 border-t border-white/10">
     <div className="max-w-2xl mx-auto space-y-3">
     <div className="flex items-center gap-3">
@@ -23,11 +26,12 @@ export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done
     </div>
     <div className="flex items-center gap-2">
       <div className="flex flex-1 p-1 rounded-full bg-[#131728] border border-white/10">
-        {[["stage", "Stage view", Clapperboard], ["phone", "Phone view", Smartphone]].map(([m, label, Icon]) => (
+        {[["stage", t("stageView"), Clapperboard], ["phone", t("phoneView"), Smartphone]].map(([m, label, Icon]) => (
           <button
             key={m}
             data-testid={`preview-${m}-view-btn`}
             onClick={() => onMode(m)}
+            disabled={recording}
             className={`flex-1 h-10 rounded-full text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
               mode === m ? "bg-[#FF2A85] text-white shadow-[0_0_16px_rgba(255,42,133,0.5)]" : "text-slate-400 hover:text-white"
             }`}
@@ -39,14 +43,24 @@ export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done
       <button
         data-testid="preview-replay-btn"
         onClick={onReplay}
+        disabled={recording}
         aria-label="Replay"
         className={`h-12 px-4 rounded-full font-semibold text-xs flex items-center gap-1.5 transition-colors ${
           done ? "bg-[#FFD043] text-[#06070D]" : "border border-[#FFD043]/40 text-[#FFD043] hover:bg-[#FFD043]/10"
         }`}
       >
-        <RotateCcw className="w-4 h-4" /> Replay
+        <RotateCcw className="w-4 h-4" /> {t("replay")}
       </button>
     </div>
+    <button
+      data-testid="preview-record-btn"
+      onClick={onRecord}
+      disabled={recording}
+      className="w-full h-11 rounded-full border border-[#FF2A85]/50 text-[#FF5E9F] text-xs font-semibold flex items-center justify-center gap-2 hover:bg-[#FF2A85]/10 transition-colors disabled:opacity-80"
+    >
+      {recording ? <><Circle className="w-3.5 h-3.5 fill-[#FF2A85] text-[#FF2A85] animate-pulse" /> {t("recording")}</> : <><Video className="w-4 h-4" /> {t("record")}</>}
+    </button>
     </div>
   </div>
-);
+  );
+};

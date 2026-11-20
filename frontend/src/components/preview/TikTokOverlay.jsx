@@ -1,10 +1,13 @@
 import { Heart, MessageCircle, Share2, Music2 } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
-export const TikTokOverlay = ({ kit }) => (
+export const TikTokOverlay = ({ kit }) => {
+  const t = useT();
+  return (
   <div className="absolute inset-0 pointer-events-none text-white" data-testid="preview-tiktok-overlay">
     <div className="absolute top-3 inset-x-0 flex justify-center gap-4 text-[11px] font-semibold">
-      <span className="opacity-60">Following</span>
-      <span className="border-b-2 border-white pb-0.5">For You</span>
+      <span className="opacity-60">{t("following")}</span>
+      <span className="border-b-2 border-white pb-0.5">{t("forYou")}</span>
     </div>
     <div className="absolute right-2 bottom-20 flex flex-col items-center gap-4 text-[10px]">
       {[[Heart, "12.4K"], [MessageCircle, "318"], [Share2, "Share"]].map(([Icon, n]) => (
@@ -20,4 +23,5 @@ export const TikTokOverlay = ({ kit }) => (
       <div className="flex items-center gap-1 mt-1 opacity-90 truncate"><Music2 className="w-3 h-3 shrink-0" /> {kit.song}</div>
     </div>
   </div>
-);
+  );
+};

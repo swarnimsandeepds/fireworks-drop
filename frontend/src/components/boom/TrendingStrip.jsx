@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Music2, MapPin, Radio } from "lucide-react";
 import { API } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 export const TrendingStrip = ({ onAdd }) => {
+  const t = useT();
   const [data, setData] = useState(null);
 
   useEffect(() => {
@@ -12,8 +14,8 @@ export const TrendingStrip = ({ onAdd }) => {
 
   const chips = data
     ? [
-        ...data.sounds.map((s) => ({ key: `s-${s.title}`, icon: Music2, label: s.title, sub: s.artist, text: `dancing to "${s.title}"${s.artist ? ` by ${s.artist}` : ""}` })),
-        ...data.events.map((e) => ({ key: `e-${e.name}`, icon: MapPin, label: e.name, sub: e.place, text: `near ${e.name}${e.place ? ` at ${e.place}` : ""}` })),
+        ...data.sounds.map((s) => ({ key: `s-${s.title}`, icon: Music2, label: s.title, sub: s.artist, text: t("chipSong")(s.title, s.artist) })),
+        ...data.events.map((e) => ({ key: `e-${e.name}`, icon: MapPin, label: e.name, sub: e.place, text: t("chipEvent")(e.name, e.place) })),
       ]
     : [];
 
@@ -21,11 +23,11 @@ export const TrendingStrip = ({ onAdd }) => {
     <section className="pb-2 rise" style={{ animationDelay: "0.05s" }} data-testid="trending-strip">
       <div className="flex items-center justify-between mb-2">
         <span className="flex items-center gap-1.5 font-mono-bd text-[10px] uppercase tracking-widest text-[#FFD043]">
-          <Radio className="w-3.5 h-3.5" /> Trending tonight
+          <Radio className="w-3.5 h-3.5" /> {t("trending")}
         </span>
         {data && (
           <span className="font-mono-bd text-[9px] uppercase tracking-wider text-slate-500" data-testid="trending-source-label">
-            {data.live ? "Live · You.com" : "House picks"}
+            {data.live ? t("live") : t("house")}
           </span>
         )}
       </div>

@@ -2,6 +2,7 @@
 export function createBeat(ctx) {
   let master = null;
   let muted = false;
+  const tap = ctx.createMediaStreamDestination ? ctx.createMediaStreamDestination() : null;
   const noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const nd = noise.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
@@ -75,6 +76,7 @@ export function createBeat(ctx) {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 0.7;
     master.connect(ctx.destination);
+    if (tap) master.connect(tap);
     const base = ctx.currentTime + 0.03;
     const at = (st, fn) => st >= 0 && st <= 15 && fn(base + st);
     for (let k = -40; k < 40; k++) {
@@ -104,5 +106,5 @@ export function createBeat(ctx) {
     if (master) master.gain.value = m ? 0 : 0.7;
   }
 
-  return { play, stop, setMuted };
+  return { play, stop, setMuted, stream: tap?.stream };
 }
