@@ -13,12 +13,16 @@ export const MicButton = ({ onTranscript, disabled, editMode, busy }) => {
   const chunks = useRef([]);
   const startedAt = useRef(0);
   const pressed = useRef(false);
+  const pending = useRef(false);
 
   const start = async () => {
-    if (state !== "idle" || disabled) return;
+    if (state !== "idle" || disabled || pending.current) return;
     pressed.current = true;
+    pending.current = true;
+    let stream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      pending.current = false;
       if (!pressed.current) {
         stream.getTracks().forEach((t) => t.stop());
         return toast(t("holdWhile"));
@@ -35,6 +39,8 @@ export const MicButton = ({ onTranscript, disabled, editMode, busy }) => {
       startedAt.current = Date.now();
       setState("recording");
     } catch {
+      pending.current = false;
+      stream?.getTracks().forEach((tr) => tr.stop());
       toast.error(t("micBlocked"));
     }
   };

@@ -26,8 +26,8 @@ export const OrderFlow = ({ kit, open, onOpenChange, delivery }) => {
     if (!open) return;
     setStep("spot");
     setOrder(null);
-    if (delivery?.spot) setSpot(delivery.spot);
-    if (delivery?.time) setTime(delivery.time);
+    setSpot(delivery?.spot || "");
+    setTime(delivery?.time || defaultTime());
   }, [open, delivery]);
 
   const pay = async () => {

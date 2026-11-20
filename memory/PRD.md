@@ -19,6 +19,8 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Voice edits (POST /api/shot-kit/{id}/edit, change banner + highlights, delivery prefill), EN/Khmer toggle (lib/i18n.js, Khmer speech, Khmer read-aloud), share links (/?kit=id, Telegram, copy), record 9:16 preview clip (canvas + beat audio), The Stand: lazy 3D catalog with drei View, tilt and mini particle demos
 
+- 2026-06: Khmer and crew-aware backup kits, recorded clip includes the TikTok overlay and DROP label, delivery saved on the kit, Undo last voice edit
+
 ## Backlog (from test report iteration 2)
 - P1: Enforce 4-6 cues and a drop cue after budget trimming; reconcile cue counts against cart quantities; cap the size of LLM-supplied quantities
 - P1: Pause/resume in the preview; the DROP label stays on screen when the drop is at 14-15s; the 9:16 frame is stretched on tall, narrow phones

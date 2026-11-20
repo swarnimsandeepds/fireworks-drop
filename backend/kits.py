@@ -132,13 +132,17 @@ def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en"):
     if budget is not None:
         def over():
             return _cost([drop_cue] + others, extra) > budget + 1e-9
-        while over() and extra:
-            i = min(extra, key=lambda k: (k == drop_cue["item_id"], price(k)))
-            extra[i] -= 1
-            if extra[i] <= 0:
-                del extra[i]
+        def trim_extra(keep_wands):
+            while over() and any(k != 1 or not keep_wands for k in extra):
+                pool = [k for k in extra if k != 1 or not keep_wands]
+                i = min(pool, key=lambda k: (k == drop_cue["item_id"], price(k)))
+                extra[i] -= 1
+                if extra[i] <= 0:
+                    del extra[i]
+        trim_extra(True)
         while over() and len(others) > 3:
-            others.remove(min(others, key=lambda c: price(c["item_id"])))
+            others.remove(min([c for c in others if c["item_id"] != 1] or others, key=lambda c: price(c["item_id"])))
+        trim_extra(False)
         while over():
             pricey = [c for c in others if c["item_id"] != 6]
             if pricey:
@@ -186,7 +190,8 @@ def fallback_raw(request: str, trends: dict, lang: str = "en") -> dict:
     named = [x["title"] for x in sounds if x["title"].lower().strip(" .") in request.lower()]
     asked = requested_items(request)
     drop_item = next((i for i in DROP_RANK if i in asked), 11)
-    rest = [i for i in asked if i != drop_item]
+    crew_now = parse_crew(request)
+    rest = ([1] if crew_now > 1 else []) + [i for i in asked if i != drop_item and not (i == 1 and crew_now > 1)]
     rest += [i for i in (1, 4, 6, 9) if i not in rest and i != drop_item]
     cues = [make_cue(drop, drop_item, lang=lang)]
     for item_id in rest[:4]:
