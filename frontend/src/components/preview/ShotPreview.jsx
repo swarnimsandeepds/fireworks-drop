@@ -79,7 +79,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
     start.current = performance.now();
     readyRef.current = true;
     autoCut.current = false;
-    beat?.play(drop);
+    if (pausedRef.current === null) beat?.play(drop);
     return () => beat?.stop();
   }, [beat, drop, ready]);
 
@@ -194,7 +194,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
           {webgl ? (
             <GLBoundary fallback={<Fallback2D kit={kit} getTime={getTime} runId={runId} onMount={onReady} />}>
               <Suspense fallback={<div className="w-full h-full grid place-items-center font-mono-bd text-xs text-slate-400">{t("loadingStage")}</div>}>
-                <Scene3D kit={kit} getTime={getTime} runId={runId} mode={mode} mobile={mobile} onReady={onReady} />
+                <Scene3D kit={kit} getTime={getTime} runId={runId} mode={mode} mobile={mobile} onReady={onReady} paused={paused} />
               </Suspense>
             </GLBoundary>
           ) : fallback}

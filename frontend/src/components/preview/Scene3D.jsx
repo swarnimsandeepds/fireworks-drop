@@ -22,7 +22,7 @@ function CameraRig({ mode }) {
   return null;
 }
 
-function Content({ kit, getTime, runId, mode, mobile }) {
+function Content({ kit, getTime, runId, mode, mobile, paused }) {
   const world = useRef();
   const add = useRef();
   const norm = useRef();
@@ -41,7 +41,7 @@ function Content({ kit, getTime, runId, mode, mobile }) {
       </group>
       <CameraRig mode={mode} />
       {mode === "stage" && (
-        <OrbitControls target={[0, 1.6, 0]} enablePan={false} minDistance={5} maxDistance={22} maxPolarAngle={Math.PI / 2.05} autoRotate autoRotateSpeed={1.5} enableDamping />
+        <OrbitControls target={[0, 1.6, 0]} enablePan={false} minDistance={5} maxDistance={22} maxPolarAngle={Math.PI / 2.05} autoRotate={!paused} autoRotateSpeed={1.5} enableDamping />
       )}
       <EffectComposer multisampling={0}>
         <Bloom ref={bloom} mipmapBlur luminanceThreshold={0.55} luminanceSmoothing={0.2} intensity={1.1} radius={0.7} />

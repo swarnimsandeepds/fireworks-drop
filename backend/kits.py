@@ -116,7 +116,7 @@ def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en", ban
     extra = {i: q for i, q in extra.items() if i not in banned}
 
     def ok(ids):
-        return [i for i in ids if i not in banned] or [i for i in (6, 1, 9, 7, 2) if i not in banned] or [6]
+        return [i for i in ids if i not in banned] or sorted((i for i in CATALOG_BY_ID if i not in banned), key=price) or [6]
     near = [c for c in cues if abs(c["second"] - drop) < 0.6]
     if near:
         drop_cue = max(near, key=lambda c: price(c["item_id"]))

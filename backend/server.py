@@ -217,6 +217,7 @@ EDIT_PROMPT = (
     "You are BoomDrop, a fireworks stand for TikTok dancers in Phnom Penh. You edit an existing 15 second Shot Kit from a dancer's "
     "voice command. Use only catalog items. Keep 4 to 6 cues and keep the biggest effect on the beat drop. The dancer may add or "
     "remove items, change the budget, or set the delivery place and time. Keep everything the command does not change. "
+    "Never use items listed in the current removed_item_ids unless the command explicitly asks to add them back. "
     "Return only JSON with: kit_name, song, drop_second, cues (array of second, item_id, effect, placement_tip), filming_tip, "
     "cart (array of item_id, qty), removed_item_ids (catalog ids the dancer asked to remove, or []), "
     "added_item_ids (catalog ids the dancer explicitly asked to add back or add, or []), budget_usd (new budget in US dollars at 4000 riel per dollar, or null if not mentioned), "
@@ -226,6 +227,7 @@ EDIT_PROMPT = (
 )
 
 
+ADD_WORDS = re.compile(r"\b(add|bring back|put back|include|plus|more|want)\b|បន្ថែម|ដាក់", re.I)
 REMOVE_WORDS = re.compile(r"\b(remove|drop the|no more|without|take out|delete|ditch|lose the)\b|ដក|យកចេញ|កុំ", re.I)
 
 
@@ -255,6 +257,7 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
         "kit_name": current.kit_name, "song": current.song, "drop_second": current.drop_second, "filming_tip": current.filming_tip,
         "cues": [{"second": c.second, "item_id": c.item_id, "effect": c.effect, "placement_tip": c.placement_tip} for c in current.cues],
         "cart": [{"item_id": c.item_id, "qty": c.qty} for c in current.cart], "budget_usd": current.budget_usd,
+        "removed_item_ids": current.removed,
     }
     trends_data = {"sources": [x.model_dump() for x in current.sources], "live": current.live_trends}
     for attempt in range(2):
@@ -268,10 +271,11 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
             budget = float(b) if isinstance(b, (int, float)) and b > 0 else (parse_budget(body.command) or current.budget_usd)
             def ids(key):
                 return {int(i) for i in raw.get(key) or [] if str(i).isdigit() and int(i) in CATALOG_BY_ID}
-            removed = (set(current.removed) | ids("removed_item_ids")) - ids("added_item_ids")
+            added = ids("added_item_ids") if ADD_WORDS.search(body.command) else set()
+            removed = (set(current.removed) | ids("removed_item_ids")) - added
             if REMOVE_WORDS.search(body.command):
                 after = {int(c["item_id"]) for c in (raw.get("cues") or []) + (raw.get("cart") or []) if str(c.get("item_id", "")).isdigit()}
-                removed |= {c.item_id for c in current.cart} - after - ids("added_item_ids")
+                removed |= {c.item_id for c in current.cart} - after - added
             kit = build_kit(current.request, raw, trends_data, budget, body.lang, removed)
             kit.removed = sorted(removed)
             new_delivery = clean_delivery(raw.get("delivery")) or {}
@@ -287,7 +291,7 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
 
 @api_router.post("/clips")
 async def upload_clip(video: UploadFile = File(...), kit_id: str = Form(...), crew: str = Form("")):
-    data = await video.read()
+    data = await video.read(25 * 1024 * 1024 + 1)
     ctype = (video.content_type or "").split(";")[0]
     if ctype not in ("video/webm", "video/mp4") or not data:
         raise HTTPException(400, "Upload a webm or mp4 clip")

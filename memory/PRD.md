@@ -21,6 +21,8 @@ Claude Sonnet (Emergent key), English-only UI and speech, Whisper STT.
 
 - 2026-06: Khmer and crew-aware backup kits, recorded clip includes the TikTok overlay and DROP label, delivery saved on the kit, Undo last voice edit
 
+- 2026-06: Kit locked at checkout, removed items remembered (kit.removed, banned in plan_kit), preview pause/resume, Crew Video Wall (object storage, /api/clips)
+
 ## Backlog (from test report iteration 2)
 - P1: Enforce 4-6 cues and a drop cue after budget trimming; reconcile cue counts against cart quantities; cap the size of LLM-supplied quantities
 - P1: Pause/resume in the preview; the DROP label stays on screen when the drop is at 14-15s; the 9:16 frame is stretched on tall, narrow phones
