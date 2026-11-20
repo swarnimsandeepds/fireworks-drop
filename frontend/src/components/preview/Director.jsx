@@ -49,6 +49,8 @@ export function Director({ kit, getTime, runId, addRef, normRef, handsRef, world
     const s = st.current;
     const dt = Math.min(rawDt, 0.05);
     const t = getTime();
+    if (t === s.lastT) return;
+    s.lastT = t;
     kit.cues.forEach((c, i) => {
       if (!s.fired.has(i) && t >= c.second) {
         s.fired.add(i);

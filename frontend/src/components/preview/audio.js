@@ -70,15 +70,15 @@ export function createBeat(ctx) {
     master = null;
   }
 
-  function play(drop) {
+  function play(drop, fromT = 0) {
     stop();
     if (ctx.state === "closed") return;
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 0.7;
     master.connect(ctx.destination);
     if (tap) master.connect(tap);
-    const base = ctx.currentTime + 0.03;
-    const at = (st, fn) => st >= 0 && st <= 15 && fn(base + st);
+    const base = ctx.currentTime + 0.03 - fromT;
+    const at = (st, fn) => st >= fromT && st <= 15 && fn(base + st);
     for (let k = -40; k < 40; k++) {
       const st = drop + k * 0.5;
       if (st < 0 || st > 15) continue;
@@ -96,7 +96,7 @@ export function createBeat(ctx) {
       const v = 0.12 + 0.25 * (1 - (drop - st) / 2);
       at(st, (t) => snare(t, v));
     }
-    if (drop > 0.5) riser(base + Math.max(0, drop - 4), base + drop - 0.25);
+    if (drop > 0.5 && fromT < drop - 0.3) riser(base + Math.max(fromT, drop - 4), base + drop - 0.25);
     at(drop, (t) => hit(t, 0.5, 1.8, "highpass", 3000));
     at(drop, (t) => tone(t, "sine", 55, 0, 0.7, 0.9));
   }

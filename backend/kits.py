@@ -109,16 +109,21 @@ def _free_second(cues, drop):
     return next((s for s in FILL_SECONDS if all(abs(s - t) >= 1 for t in taken)), 0.0)
 
 
-def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en"):
+def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en", banned=()):
     """Returns (cues, qty_by_item): 4-6 cues, one on the drop, each cue uses one unit, fit to budget."""
-    cues = [dict(c) for c in cues]
+    banned = set(banned)
+    cues = [dict(c) for c in cues if c["item_id"] not in banned]
+    extra = {i: q for i, q in extra.items() if i not in banned}
+
+    def ok(ids):
+        return [i for i in ids if i not in banned] or [i for i in (6, 1, 9, 7, 2) if i not in banned] or [6]
     near = [c for c in cues if abs(c["second"] - drop) < 0.6]
     if near:
         drop_cue = max(near, key=lambda c: price(c["item_id"]))
     elif cues:
         drop_cue = max(cues, key=lambda c: price(c["item_id"]))
     else:
-        drop_cue = make_cue(drop, 3, lang=lang)
+        drop_cue = make_cue(drop, ok([3, 11, 8, 2])[0], lang=lang)
     drop_cue["second"] = drop
     others = [c for c in cues if c is not drop_cue and abs(c["second"] - drop) >= 0.6]
     others = sorted(others, key=lambda c: -price(c["item_id"]))[:5]
@@ -126,8 +131,8 @@ def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en"):
 
     while len(others) < 3:
         rest = None if budget is None else budget - _cost([drop_cue] + others, extra)
-        fits = [i for i in (9, 7, 1, 6) if rest is None or price(i) <= rest]
-        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else 6, lang=lang))
+        fits = [i for i in ok([9, 7, 1, 6]) if rest is None or price(i) <= rest]
+        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else min(ok([6, 1, 9, 7]), key=price), lang=lang))
 
     if budget is not None:
         def over():
@@ -144,13 +149,14 @@ def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en"):
             others.remove(min([c for c in others if c["item_id"] != 1] or others, key=lambda c: price(c["item_id"])))
         trim_extra(False)
         while over():
-            pricey = [c for c in others if c["item_id"] != 6]
+            cheapest = min(ok([6, 1, 9, 7, 2]), key=price)
+            pricey = [c for c in others if price(c["item_id"]) > price(cheapest)]
             if pricey:
-                _swap(max(pricey, key=lambda c: price(c["item_id"])), 6, lang)
+                _swap(max(pricey, key=lambda c: price(c["item_id"])), cheapest, lang)
                 continue
             rest = budget - _cost(others, {})
-            options = [i for i in BIG_FIRST if price(i) <= rest and price(i) < price(drop_cue["item_id"])]
-            new = options[0] if options else 6
+            options = [i for i in ok(BIG_FIRST) if price(i) <= rest and price(i) < price(drop_cue["item_id"])]
+            new = options[0] if options else cheapest
             if new == drop_cue["item_id"]:
                 break
             _swap(drop_cue, new, lang)

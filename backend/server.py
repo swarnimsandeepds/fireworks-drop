@@ -18,6 +18,8 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
 from kits import CATALOG, CATALOG_BY_ID, KHR_RATE, MAX_QTY, SONG_FALLBACK, clean_song, fallback_raw, parse_budget, plan_kit
 from trends import get_trends, trends_prompt
+from storage import APP_NAME, get_object, init_storage, put_object
+from fastapi.responses import Response
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -104,6 +106,7 @@ class ShotKit(BaseModel):
     live_trends: bool = False
     budget_usd: Optional[float] = None
     delivery: Optional[dict] = None
+    removed: List[int] = []
     fallback: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -115,7 +118,7 @@ def parse_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float], lang: str = "en") -> ShotKit:
+def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float], lang: str = "en", banned=()) -> ShotKit:
     cues = []
     for c in raw.get("cues", []):
         item = CATALOG_BY_ID.get(int(c.get("item_id", 0)))
@@ -135,7 +138,7 @@ def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float], la
         usage[c["item_id"]] = usage.get(c["item_id"], 0) + 1
     extra = {i: q - usage.get(i, 0) for i, q in asked.items() if q > usage.get(i, 0)}
     drop = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
-    planned, qty = plan_kit(cues, extra, drop, budget, lang)
+    planned, qty = plan_kit(cues, extra, drop, budget, lang, banned)
     cue_models = [Cue(second=c["second"], item_id=c["item_id"], item_name=CATALOG_BY_ID[c["item_id"]]["name"], effect=c["effect"],
                       effect_type=CATALOG_BY_ID[c["item_id"]]["effect"], placement_tip=c["placement_tip"]) for c in planned]
     cart = [CartItem(item_id=i, name=CATALOG_BY_ID[i]["name"], qty=q, price_usd=CATALOG_BY_ID[i]["price_usd"],
@@ -215,11 +218,15 @@ EDIT_PROMPT = (
     "voice command. Use only catalog items. Keep 4 to 6 cues and keep the biggest effect on the beat drop. The dancer may add or "
     "remove items, change the budget, or set the delivery place and time. Keep everything the command does not change. "
     "Return only JSON with: kit_name, song, drop_second, cues (array of second, item_id, effect, placement_tip), filming_tip, "
-    "cart (array of item_id, qty), budget_usd (new budget in US dollars at 4000 riel per dollar, or null if not mentioned), "
+    "cart (array of item_id, qty), removed_item_ids (catalog ids the dancer asked to remove, or []), "
+    "added_item_ids (catalog ids the dancer explicitly asked to add back or add, or []), budget_usd (new budget in US dollars at 4000 riel per dollar, or null if not mentioned), "
     f"delivery (object with spot as one of {json.dumps(SPOTS)} or null, and time as HH:MM 24h or null), "
     "changes (1 to 4 very short phrases saying what changed).\n\n"
     f"Catalog (id, name, price_usd, effect type):\n{json.dumps(CATALOG)}"
 )
+
+
+REMOVE_WORDS = re.compile(r"\b(remove|drop the|no more|without|take out|delete|ditch|lose the)\b|ដក|យកចេញ|កុំ", re.I)
 
 
 def clean_delivery(d) -> Optional[dict]:
@@ -259,7 +266,14 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
             raw = parse_json(text)
             b = raw.get("budget_usd")
             budget = float(b) if isinstance(b, (int, float)) and b > 0 else (parse_budget(body.command) or current.budget_usd)
-            kit = build_kit(current.request, raw, trends_data, budget, body.lang)
+            def ids(key):
+                return {int(i) for i in raw.get(key) or [] if str(i).isdigit() and int(i) in CATALOG_BY_ID}
+            removed = (set(current.removed) | ids("removed_item_ids")) - ids("added_item_ids")
+            if REMOVE_WORDS.search(body.command):
+                after = {int(c["item_id"]) for c in (raw.get("cues") or []) + (raw.get("cart") or []) if str(c.get("item_id", "")).isdigit()}
+                removed |= {c.item_id for c in current.cart} - after - ids("added_item_ids")
+            kit = build_kit(current.request, raw, trends_data, budget, body.lang, removed)
+            kit.removed = sorted(removed)
             new_delivery = clean_delivery(raw.get("delivery")) or {}
             merged = {**(current.delivery or {}), **{k: v for k, v in new_delivery.items() if v}}
             kit.delivery = merged or None
@@ -269,6 +283,46 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
         except Exception as e:
             logger.warning("kit edit attempt %d failed: %s", attempt + 1, e)
     return {"kit": current.model_dump(), "changes": [], "delivery": None, "applied": False}
+
+
+@api_router.post("/clips")
+async def upload_clip(video: UploadFile = File(...), kit_id: str = Form(...), crew: str = Form("")):
+    data = await video.read()
+    ctype = (video.content_type or "").split(";")[0]
+    if ctype not in ("video/webm", "video/mp4") or not data:
+        raise HTTPException(400, "Upload a webm or mp4 clip")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(413, "Clip too large")
+    kit = await db.shot_kits.find_one({"id": kit_id}, {"_id": 0, "kit_name": 1, "song": 1})
+    if not kit:
+        raise HTTPException(404, "Kit not found")
+    clip_id = str(uuid.uuid4())
+    path = f"{APP_NAME}/clips/{clip_id}.{'mp4' if ctype == 'video/mp4' else 'webm'}"
+    try:
+        result = await asyncio.to_thread(put_object, path, data, ctype)
+    except Exception as e:
+        logger.error("clip upload failed: %s", e)
+        raise HTTPException(502, "Could not save the clip right now")
+    clip = {"id": clip_id, "kit_id": kit_id, "kit_name": kit["kit_name"], "song": kit["song"],
+            "crew": (crew.strip() or "Phnom Penh crew")[:40], "storage_path": result["path"], "content_type": ctype,
+            "size": len(data), "is_deleted": False, "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.clips.insert_one(dict(clip))
+    return {k: clip[k] for k in ("id", "kit_id", "kit_name", "song", "crew", "created_at")}
+
+
+@api_router.get("/clips")
+async def list_clips():
+    docs = await db.clips.find({"is_deleted": False}, {"_id": 0, "storage_path": 0}).sort("created_at", -1).to_list(24)
+    return docs
+
+
+@api_router.get("/clips/{clip_id}/video")
+async def clip_video(clip_id: str):
+    doc = await db.clips.find_one({"id": clip_id, "is_deleted": False}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Clip not found")
+    data, _ = await asyncio.to_thread(get_object, doc["storage_path"])
+    return Response(content=data, media_type=doc["content_type"], headers={"Cache-Control": "public, max-age=86400"})
 
 
 @api_router.post("/orders")
@@ -300,6 +354,8 @@ async def ensure_indexes():
     try:
         await db.shot_kits.create_index("id", unique=True)
         await db.orders.create_index("order_no", unique=True)
+        await db.clips.create_index([("is_deleted", 1), ("created_at", -1)])
+        await asyncio.to_thread(init_storage)
     except Exception as e:
         logger.error("index creation failed: %s", e)
 

@@ -6,6 +6,7 @@ import { MicButton } from "@/components/boom/MicButton";
 import { RequestInput } from "@/components/boom/RequestInput";
 import { ShotKitCard } from "@/components/boom/ShotKitCard";
 import { TrendingStrip } from "@/components/boom/TrendingStrip";
+import { CrewWall } from "@/components/boom/CrewWall";
 
 import { API } from "@/lib/api";
 import { LangContext, STR } from "@/lib/i18n";
@@ -107,6 +108,7 @@ function App() {
         <MicButton onTranscript={onTranscript} disabled={loading || editing} editMode={!!kit} busy={editing} />
         <RequestInput transcript={transcript} text={text} setText={setText} onSubmit={buildKit} loading={loading || editing} />
         {kit && <ShotKitCard kit={kit} changes={changes} delivery={kit.delivery} onUndo={history.length && !editing ? undo : null} />}
+        <CrewWall />
       </main>
       <footer className="relative z-10 max-w-md mx-auto px-5 pb-10 text-center font-mono-bd text-[10px] uppercase tracking-widest text-slate-500" data-testid="app-footer">
         {t("footer")}

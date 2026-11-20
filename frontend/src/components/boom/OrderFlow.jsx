@@ -14,7 +14,9 @@ const defaultTime = () => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-export const OrderFlow = ({ kit, open, onOpenChange, delivery }) => {
+export const OrderFlow = ({ kit: liveKit, open, onOpenChange, delivery }) => {
+  const [locked, setLocked] = useState(null);
+  const kit = locked || liveKit;
   const t = useT();
   const [step, setStep] = useState("spot");
   const [spot, setSpot] = useState("");
@@ -23,12 +25,13 @@ export const OrderFlow = ({ kit, open, onOpenChange, delivery }) => {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setLocked(null); return; }
+    setLocked(liveKit);
     setStep("spot");
     setOrder(null);
     setSpot(delivery?.spot || "");
     setTime(delivery?.time || defaultTime());
-  }, [open, delivery]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pay = async () => {
     setBusy(true);

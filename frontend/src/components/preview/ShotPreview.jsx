@@ -7,6 +7,7 @@ import { createBeat } from "./audio";
 import Fallback2D from "./Fallback2D";
 import { TikTokOverlay } from "./TikTokOverlay";
 import { drawOverlay } from "./clipOverlay";
+import { PostClip } from "./PostClip";
 import { PreviewControls } from "./PreviewControls";
 
 const Scene3D = lazy(() => import("./Scene3D"));
@@ -45,10 +46,31 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   const [sec, setSec] = useState(0);
   const [dropOn, setDropOn] = useState(false);
   const [done, setDone] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(null);
+  const [clip, setClip] = useState(null);
   const [muted, setMuted] = useState(false);
   const [ready, setReady] = useState(!webgl);
   const readyRef = useRef(!webgl);
-  const getTime = useCallback(() => (readyRef.current ? Math.min(15, (performance.now() - start.current) / 1000) : 0), []);
+  const getTime = useCallback(() => {
+    if (!readyRef.current) return 0;
+    if (pausedRef.current !== null) return pausedRef.current;
+    return Math.min(15, (performance.now() - start.current) / 1000);
+  }, []);
+  const togglePause = () => {
+    if (pausedRef.current !== null) {
+      const at = pausedRef.current;
+      start.current = performance.now() - at * 1000;
+      pausedRef.current = null;
+      setPaused(false);
+      audioCtx?.resume();
+      beat?.play(drop, at);
+    } else {
+      pausedRef.current = getTime();
+      setPaused(true);
+      beat?.stop();
+    }
+  };
 
   const onReady = useCallback(() => setReady(true), []);
 
@@ -88,6 +110,8 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   }, [onClose]);
 
   const replay = (keepPhone) => {
+    pausedRef.current = null;
+    setPaused(false);
     start.current = performance.now();
     autoCut.current = keepPhone === true;
     if (keepPhone !== true) setMode("stage");
@@ -127,6 +151,7 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         a.href = URL.createObjectURL(new Blob(chunks, { type }));
         a.download = `boomdrop-${kit.kit_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "kit"}.${type.includes("mp4") ? "mp4" : "webm"}`;
         a.click();
+        setClip({ blob: new Blob(chunks, { type }), type });
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);
         recRef.current = false;
         setRecording(false);
@@ -187,7 +212,8 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
         )}
       </div>
 
-      <PreviewControls kit={kit} sec={sec} barRef={barRef} mode={mode} onMode={pickMode} onReplay={replay} done={done} onRecord={record} recording={recording} />
+      <PreviewControls kit={kit} sec={sec} barRef={barRef} mode={mode} onMode={pickMode} onReplay={replay} done={done} onRecord={record} recording={recording} paused={paused} onPause={togglePause} />
+      {clip && <PostClip clip={clip} kit={kit} onDone={() => setClip(null)} />}
     </div>,
     document.body
   );

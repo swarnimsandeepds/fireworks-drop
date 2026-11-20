@@ -1,9 +1,9 @@
-import { RotateCcw, Smartphone, Clapperboard, Video, Circle } from "lucide-react";
+import { RotateCcw, Smartphone, Clapperboard, Video, Circle, Pause, Play } from "lucide-react";
 import { useT } from "@/lib/i18n";
 
 const fmt = (s) => `0:${String(s).padStart(2, "0")}`;
 
-export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done, onRecord, recording }) => {
+export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done, onRecord, recording, paused, onPause }) => {
   const t = useT();
   return (
   <div className="shrink-0 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)] space-y-3 bg-[#0D0F1A]/95 border-t border-white/10">
@@ -40,6 +40,15 @@ export const PreviewControls = ({ kit, sec, barRef, mode, onMode, onReplay, done
           </button>
         ))}
       </div>
+      <button
+        data-testid="preview-pause-btn"
+        onClick={onPause}
+        disabled={recording || done}
+        aria-label={paused ? t("resume") : t("pause")}
+        className="h-12 w-12 shrink-0 rounded-full border border-white/15 text-white grid place-items-center hover:bg-white/10 transition-colors disabled:opacity-40"
+      >
+        {paused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4" />}
+      </button>
       <button
         data-testid="preview-replay-btn"
         onClick={onReplay}
