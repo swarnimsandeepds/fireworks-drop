@@ -18,7 +18,7 @@ export const PostClip = ({ clip, kit, onDone }) => {
     fd.append("crew", crew);
     try {
       await axios.post(`${API}/clips`, fd);
-      toast.success(t("posted"));
+      toast.success(t("sentReview"));
       window.dispatchEvent(new Event("boomdrop:clip-posted"));
       onDone();
     } catch {

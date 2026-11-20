@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { SignIn, SignUp } from "@clerk/react";
+import ClerkAuthProvider from "@/components/auth/ClerkAuthProvider";
+import AdminPage from "@/components/admin/AdminPage";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import { Header } from "@/components/boom/Header";
@@ -11,12 +15,11 @@ import { CrewWall } from "@/components/boom/CrewWall";
 import { API } from "@/lib/api";
 import { LangContext, STR } from "@/lib/i18n";
 
-function App() {
+function Home({ lang }) {
   const [text, setText] = useState("");
   const [transcript, setTranscript] = useState("");
   const [kit, setKit] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [lang, setLang] = useState("en");
   const [changes, setChanges] = useState(null);
   const [history, setHistory] = useState([]);
   const [editing, setEditing] = useState(false);
@@ -83,10 +86,8 @@ function App() {
   };
 
   return (
-    <LangContext.Provider value={{ lang, setLang }}>
     <div className="sky min-h-screen relative overflow-x-hidden">
       <div className="stars absolute inset-0 pointer-events-none" />
-      <Toaster theme="dark" position="top-center" />
       <Header />
       <main className="relative z-10 max-w-md mx-auto px-5 pb-16">
         <section className="pt-8 pb-6 rise">
@@ -112,10 +113,31 @@ function App() {
       </main>
       <footer className="relative z-10 max-w-md mx-auto px-5 pb-10 text-center font-mono-bd text-[10px] uppercase tracking-widest text-slate-500" data-testid="app-footer">
         {t("footer")}
+        <Link to="/admin" className="block mt-3 text-slate-600 hover:text-[#FFD043] transition-colors" data-testid="footer-admin-link">{t("adminLink")}</Link>
       </footer>
     </div>
-    </LangContext.Provider>
   );
 }
 
-export default App;
+const AuthPage = ({ children }) => (
+  <div className="sky min-h-screen flex items-center justify-center px-4 py-10">{children}</div>
+);
+
+export default function App() {
+  const [lang, setLang] = useState("en");
+  return (
+    <LangContext.Provider value={{ lang, setLang }}>
+      <BrowserRouter>
+        <ClerkAuthProvider>
+          <Toaster theme="dark" position="top-center" />
+          <Routes>
+            <Route path="/" element={<Home lang={lang} />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/sign-in/*" element={<AuthPage><SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" withSignUp /></AuthPage>} />
+            <Route path="/sign-up/*" element={<AuthPage><SignUp routing="path" path="/sign-up" signInUrl="/sign-in" /></AuthPage>} />
+          </Routes>
+        </ClerkAuthProvider>
+      </BrowserRouter>
+    </LangContext.Provider>
+  );
+}

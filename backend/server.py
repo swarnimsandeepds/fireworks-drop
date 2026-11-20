@@ -18,8 +18,9 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai import OpenAISpeechToText
 from kits import CATALOG, CATALOG_BY_ID, KHR_RATE, MAX_QTY, SONG_FALLBACK, clean_song, fallback_raw, parse_budget, plan_kit
 from trends import get_trends, trends_prompt
-from storage import APP_NAME, get_object, init_storage, put_object
-from fastapi.responses import Response
+from storage import init_storage
+from wall import build_wall_router
+from clerk_auth import clerk_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -289,46 +290,6 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
     return {"kit": current.model_dump(), "changes": [], "delivery": None, "applied": False}
 
 
-@api_router.post("/clips")
-async def upload_clip(video: UploadFile = File(...), kit_id: str = Form(...), crew: str = Form("")):
-    data = await video.read(25 * 1024 * 1024 + 1)
-    ctype = (video.content_type or "").split(";")[0]
-    if ctype not in ("video/webm", "video/mp4") or not data:
-        raise HTTPException(400, "Upload a webm or mp4 clip")
-    if len(data) > 25 * 1024 * 1024:
-        raise HTTPException(413, "Clip too large")
-    kit = await db.shot_kits.find_one({"id": kit_id}, {"_id": 0, "kit_name": 1, "song": 1})
-    if not kit:
-        raise HTTPException(404, "Kit not found")
-    clip_id = str(uuid.uuid4())
-    path = f"{APP_NAME}/clips/{clip_id}.{'mp4' if ctype == 'video/mp4' else 'webm'}"
-    try:
-        result = await asyncio.to_thread(put_object, path, data, ctype)
-    except Exception as e:
-        logger.error("clip upload failed: %s", e)
-        raise HTTPException(502, "Could not save the clip right now")
-    clip = {"id": clip_id, "kit_id": kit_id, "kit_name": kit["kit_name"], "song": kit["song"],
-            "crew": (crew.strip() or "Phnom Penh crew")[:40], "storage_path": result["path"], "content_type": ctype,
-            "size": len(data), "is_deleted": False, "created_at": datetime.now(timezone.utc).isoformat()}
-    await db.clips.insert_one(dict(clip))
-    return {k: clip[k] for k in ("id", "kit_id", "kit_name", "song", "crew", "created_at")}
-
-
-@api_router.get("/clips")
-async def list_clips():
-    docs = await db.clips.find({"is_deleted": False}, {"_id": 0, "storage_path": 0}).sort("created_at", -1).to_list(24)
-    return docs
-
-
-@api_router.get("/clips/{clip_id}/video")
-async def clip_video(clip_id: str):
-    doc = await db.clips.find_one({"id": clip_id, "is_deleted": False}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Clip not found")
-    data, _ = await asyncio.to_thread(get_object, doc["storage_path"])
-    return Response(content=data, media_type=doc["content_type"], headers={"Cache-Control": "public, max-age=86400"})
-
-
 @api_router.post("/orders")
 async def create_order(body: OrderRequest):
     if body.spot not in SPOTS:
@@ -344,6 +305,8 @@ async def create_order(body: OrderRequest):
 
 
 app.include_router(api_router)
+app.include_router(build_wall_router(db, logger))
+app.include_router(clerk_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -358,7 +321,11 @@ async def ensure_indexes():
     try:
         await db.shot_kits.create_index("id", unique=True)
         await db.orders.create_index("order_no", unique=True)
-        await db.clips.create_index([("is_deleted", 1), ("created_at", -1)])
+        await db.clips.create_index("id", unique=True)
+        await db.clips.create_index([("status", 1), ("is_deleted", 1)])
+        await db.clip_likes.create_index([("clip_id", 1), ("device_id", 1)], unique=True)
+        await db.clip_likes.create_index("created_at")
+        await db.users.create_index("user_id", unique=True)
         await asyncio.to_thread(init_storage)
     except Exception as e:
         logger.error("index creation failed: %s", e)
