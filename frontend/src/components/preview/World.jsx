@@ -117,7 +117,7 @@ function StringLights() {
 function Tripod() {
   const legs = [0, 2.09, 4.19];
   return (
-    <group position={[0, 0, 5.5]}>
+    <group position={[0, 0, 6.6]}>
       {legs.map((a) => (
         <mesh key={a} position={[Math.cos(a) * 0.22, 0.6, Math.sin(a) * 0.22]} rotation={[Math.sin(a) * -0.35, 0, Math.cos(a) * 0.35]}>
           <cylinderGeometry args={[0.015, 0.015, 1.25, 5]} />

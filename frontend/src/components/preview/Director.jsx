@@ -56,7 +56,7 @@ export function Director({ kit, getTime, runId, addRef, normRef, handsRef, world
       }
     });
     s.emitters = s.emitters.filter((e) => {
-      if (t >= e.end) { e.done?.(); return false; }
+      if (t >= e.end || t >= 15) { e.done?.(); return false; }
       e.tick(t, dt);
       return true;
     });

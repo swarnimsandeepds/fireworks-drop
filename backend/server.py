@@ -103,20 +103,22 @@ def parse_json(text: str) -> dict:
 
 
 BUDGET_PATTERNS = [
-    r"\$\s*(\d+(?:\.\d+)?)",
-    r"(\d+(?:\.\d+)?)\s*(?:usd|dollars?|bucks)\b",
-    r"budget\D{0,15}(\d+(?:\.\d+)?)",
+    r"\$\s*(\d[\d,]*(?:\.\d+)?)",
+    r"(\d[\d,]*(?:\.\d+)?)\s*(?:usd|dollars?|bucks)\b",
+    r"budget\D{0,15}(\d[\d,]*(?:\.\d+)?)",
 ]
 
 
 def parse_budget(text: str):
     t = text.lower()
+    m = re.search(r"(\d[\d,]*)\s*(?:khr|riels?|៛)", t)
+    if m:
+        return float(m.group(1).replace(",", "")) / KHR_RATE
     for pat in BUDGET_PATTERNS:
         m = re.search(pat, t)
         if m:
-            return float(m.group(1))
-    m = re.search(r"(\d[\d,]*)\s*(?:khr|riel)", t)
-    return float(m.group(1).replace(",", "")) / KHR_RATE if m else None
+            return float(m.group(1).replace(",", ""))
+    return None
 
 
 def clean_song(value) -> str:

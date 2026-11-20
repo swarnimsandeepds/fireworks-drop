@@ -13,13 +13,13 @@ function makeParticle(type, i, s, now, item) {
   switch (type) {
     case "fountain":
     case "bundle":
-      return { ...base, x: side * 2.4, y: 0.3, vx: rnd(-0.6, 0.6) * s, vy: rnd(5, 7) * Math.sqrt(s), born: now + rnd(0, 2.4), life: 1.3, g: 9.8, drag: 0.2, color: "#ffc043" };
+      return { ...base, x: side * 1.7, y: 0.3, vx: rnd(-0.6, 0.6) * s, vy: rnd(5, 7) * Math.sqrt(s), born: now + rnd(0, 2.4), life: 1.3, g: 9.8, drag: 0.2, color: "#ffc043" };
     case "smoke":
       return { ...base, x: side * 1.4, y: 0.4, vx: rnd(0.3, 0.6), vy: 0.7, born: now + rnd(0, 2.5), life: 3.5, g: -0.05, size: 0.5 * s, kind: "smoke", color: item === 5 ? "77,128,255" : "255,77,160" };
     case "confetti":
       return { ...base, x: 0, y: 0.4, vx: rnd(-1.5, 1.5) * s, vy: rnd(5, 7) * Math.sqrt(s), drag: 1.4, g: 2, life: 3.5, kind: "conf", color: CONF[i % 5], size: 0.12 };
     case "spinner":
-      return { ...base, x: side * 2.2 + Math.cos(a) * 0.35 * s, y: 1.3 + Math.sin(a) * 0.35 * s, vx: -Math.sin(a) * 3 * s, vy: Math.cos(a) * 3 * s, born: now + rnd(0, 2), life: 0.6, drag: 1.5, color: "#cfe0ff" };
+      return { ...base, x: side * 1.7 + Math.cos(a) * 0.35 * s, y: 1.3 + Math.sin(a) * 0.35 * s, vx: -Math.sin(a) * 3 * s, vy: Math.cos(a) * 3 * s, born: now + rnd(0, 2), life: 0.6, drag: 1.5, color: "#cfe0ff" };
     case "crackle":
       return { ...base, x: rnd(-1.5, 1.5) * s, y: rnd(0.3, 2.7) * s, vx: Math.cos(a) * 1.2, vy: Math.sin(a) * 1.2, born: now + rnd(0, 1.6), life: 0.25, drag: 3, g: 0.5, color: "#ffffff" };
     default:
@@ -28,8 +28,9 @@ function makeParticle(type, i, s, now, item) {
 }
 
 // 2D canvas preview used when WebGL is unavailable.
-export default function Fallback2D({ kit, getTime, runId }) {
+export default function Fallback2D({ kit, getTime, runId, onMount }) {
   const ref = useRef();
+  useEffect(() => { onMount?.(); }, [onMount]);
   useEffect(() => {
     const cv = ref.current;
     const g = cv.getContext("2d");

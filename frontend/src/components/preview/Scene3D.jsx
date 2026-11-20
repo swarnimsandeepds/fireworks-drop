@@ -11,12 +11,12 @@ function CameraRig({ mode }) {
   const { camera } = useThree();
   useLayoutEffect(() => {
     if (mode === "stage") camera.position.set(6, 4, 12);
-    camera.fov = mode === "stage" ? 50 : 62;
+    camera.fov = mode === "stage" ? 50 : 66;
     camera.updateProjectionMatrix();
   }, [mode, camera]);
   useFrame(() => {
     if (mode !== "phone") return;
-    camera.position.set(0, 1.38, 5.4);
+    camera.position.set(0, 1.38, 6.5);
     camera.lookAt(0, 1.9, 0);
   });
   return null;
@@ -58,6 +58,7 @@ export default function Scene3D(props) {
       dpr={props.mobile ? [1, 1.5] : [1, 2]}
       gl={{ antialias: false, powerPreference: "high-performance" }}
       camera={{ position: [6, 4, 12], fov: 50, near: 0.1, far: 200 }}
+      onCreated={() => requestAnimationFrame(() => props.onReady?.())}
     >
       <Content {...props} />
     </Canvas>

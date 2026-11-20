@@ -39,13 +39,20 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
   const [dropOn, setDropOn] = useState(false);
   const [done, setDone] = useState(false);
   const [muted, setMuted] = useState(false);
-  const getTime = useCallback(() => Math.min(15, (performance.now() - start.current) / 1000), []);
+  const [ready, setReady] = useState(!webgl);
+  const readyRef = useRef(!webgl);
+  const getTime = useCallback(() => (readyRef.current ? Math.min(15, (performance.now() - start.current) / 1000) : 0), []);
+
+  const onReady = useCallback(() => setReady(true), []);
 
   useEffect(() => {
+    if (!ready) return;
     start.current = performance.now();
+    readyRef.current = true;
+    autoCut.current = false;
     beat?.play(drop);
     return () => beat?.stop();
-  }, [beat, drop]);
+  }, [beat, drop, ready]);
 
   useEffect(() => {
     let raf;
@@ -109,9 +116,9 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
             : "absolute inset-0"}
         >
           {webgl ? (
-            <GLBoundary fallback={fallback}>
+            <GLBoundary fallback={<Fallback2D kit={kit} getTime={getTime} runId={runId} onMount={onReady} />}>
               <Suspense fallback={<div className="w-full h-full grid place-items-center font-mono-bd text-xs text-slate-400">Loading stage…</div>}>
-                <Scene3D kit={kit} getTime={getTime} runId={runId} mode={mode} mobile={mobile} />
+                <Scene3D kit={kit} getTime={getTime} runId={runId} mode={mode} mobile={mobile} onReady={onReady} />
               </Suspense>
             </GLBoundary>
           ) : fallback}

@@ -38,7 +38,7 @@ export const EFFECTS = {
 
   fountain(x) {
     const { A, s, m } = x;
-    const sides = x.drop ? [-2.6, 2.6] : [x.i % 2 ? 2.6 : -2.6];
+    const sides = x.drop ? [-1.7, 1.7] : [x.i % 2 ? 1.7 : -1.7];
     sides.forEach((sx) => {
       const k = x.slot();
       x.emit(2.6, (t, dt) => {
@@ -74,7 +74,7 @@ export const EFFECTS = {
 
   spinner(x) {
     const { A, s, m } = x;
-    const c = [x.i % 2 ? -2.3 : 2.3, 1.3, 0.4];
+    const c = [x.i % 2 ? -1.7 : 1.7, 1.3, 0.4];
     const R = 0.35 * s;
     let ang = 0;
     const k = x.slot();
