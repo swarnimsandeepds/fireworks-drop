@@ -103,6 +103,7 @@ class ShotKit(BaseModel):
     sources: List["Source"] = []
     live_trends: bool = False
     budget_usd: Optional[float] = None
+    delivery: Optional[dict] = None
     fallback: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -114,7 +115,7 @@ def parse_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float]) -> ShotKit:
+def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float], lang: str = "en") -> ShotKit:
     cues = []
     for c in raw.get("cues", []):
         item = CATALOG_BY_ID.get(int(c.get("item_id", 0)))
@@ -134,7 +135,7 @@ def build_kit(request: str, raw: dict, trends: dict, budget: Optional[float]) ->
         usage[c["item_id"]] = usage.get(c["item_id"], 0) + 1
     extra = {i: q - usage.get(i, 0) for i, q in asked.items() if q > usage.get(i, 0)}
     drop = max(0.0, min(15.0, float(raw.get("drop_second", 8))))
-    planned, qty = plan_kit(cues, extra, drop, budget)
+    planned, qty = plan_kit(cues, extra, drop, budget, lang)
     cue_models = [Cue(second=c["second"], item_id=c["item_id"], item_name=CATALOG_BY_ID[c["item_id"]]["name"], effect=c["effect"],
                       effect_type=CATALOG_BY_ID[c["item_id"]]["effect"], placement_tip=c["placement_tip"]) for c in planned]
     cart = [CartItem(item_id=i, name=CATALOG_BY_ID[i]["name"], qty=q, price_usd=CATALOG_BY_ID[i]["price_usd"],
@@ -186,7 +187,7 @@ async def _llm_kit(request: str, trends_data: dict, lang: str) -> ShotKit:
     chat = LlmChat(api_key=LLM_KEY, session_id=str(uuid.uuid4()), system_message=SYSTEM_PROMPT + lang_note(lang)) \
         .with_model("anthropic", "claude-sonnet-5-5")
     text = await asyncio.wait_for(chat.send_message(UserMessage(text=request + trends_prompt(trends_data))), 60)
-    return build_kit(request, parse_json(text), trends_data, parse_budget(request))
+    return build_kit(request, parse_json(text), trends_data, parse_budget(request), lang)
 
 
 @api_router.post("/shot-kit", response_model=ShotKit)
@@ -200,7 +201,7 @@ async def create_shot_kit(body: KitRequest):
         except Exception as e:
             logger.warning("shot kit attempt %d failed: %s", attempt + 1, e)
     if kit is None:
-        kit = build_kit(body.request, fallback_raw(body.request, trends_data), trends_data, parse_budget(body.request))
+        kit = build_kit(body.request, fallback_raw(body.request, trends_data, body.lang), trends_data, parse_budget(body.request), body.lang)
         kit.fallback = True
     try:
         await db.shot_kits.insert_one(kit.model_dump())
@@ -258,10 +259,13 @@ async def edit_shot_kit(kit_id: str, body: EditRequest):
             raw = parse_json(text)
             b = raw.get("budget_usd")
             budget = float(b) if isinstance(b, (int, float)) and b > 0 else (parse_budget(body.command) or current.budget_usd)
-            kit = build_kit(current.request, raw, trends_data, budget)
+            kit = build_kit(current.request, raw, trends_data, budget, body.lang)
+            new_delivery = clean_delivery(raw.get("delivery")) or {}
+            merged = {**(current.delivery or {}), **{k: v for k, v in new_delivery.items() if v}}
+            kit.delivery = merged or None
             await db.shot_kits.insert_one(kit.model_dump())
             changes = [str(c)[:90] for c in raw.get("changes") or []][:4]
-            return {"kit": kit.model_dump(), "changes": changes, "delivery": clean_delivery(raw.get("delivery")), "applied": True}
+            return {"kit": kit.model_dump(), "changes": changes, "delivery": kit.delivery, "applied": True}
         except Exception as e:
             logger.warning("kit edit attempt %d failed: %s", attempt + 1, e)
     return {"kit": current.model_dump(), "changes": [], "delivery": None, "applied": False}

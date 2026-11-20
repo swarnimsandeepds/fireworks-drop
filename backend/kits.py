@@ -31,6 +31,25 @@ TIPS = {
     "strobe": "Front center on the ground, facing away from the phone.",
     "bundle": "Wands to the crew, fountains either side of the stage.",
 }
+TIPS_KM = {
+    "sparkle": "អ្នករាំកាន់ឱ្យឆ្ងាយពីមុខ និងសក់ប្រវែងមួយដៃ។",
+    "fountain": "ដាក់លើដីរាបស្មើ ៣ ម៉ែត្រពីក្រោយអ្នករាំ គ្មាននរណានៅក្បែរ ៣ ម៉ែត្រ។",
+    "smoke": "ដាក់លើដីពីក្រោយក្រុម ដើម្បីឱ្យពណ៌រសាត់ចូលក្នុងរូប។",
+    "confetti": "នៅមុខឆាក បាញ់ឡើងលើ ឆ្ងាយពីមុខ និងកាមេរ៉ា។",
+    "spinner": "ភ្ជាប់នៅចំហៀងឆាកលើដីស្អាត។",
+    "crackle": "ដាក់លើដីមុខឆាក ឆ្ងាយពីជើង។",
+    "strobe": "ដាក់កណ្តាលខាងមុខលើដី បែរចេញពីទូរសព្ទ។",
+    "bundle": "ចែកដំបងភ្លើងឱ្យក្រុម ទឹកភ្លើងនៅសងខាងឆាក។",
+}
+SWAP_NOTE = {"en": "Swapped in to fit your budget. ", "km": "ប្តូរដើម្បីឱ្យសមនឹងថវិកា។ "}
+EFFECT_WORDS = [
+    (11, ["cannon", "glitter", "កាណុង"]), (3, ["fountain", "ទឹកភ្លើង"]), (8, ["crackle", "ផ្ទុះតូច"]),
+    (10, ["strobe", "ភ្លឹបភ្លែត"]), (7, ["spinner", "កង្ហារ"]), (9, ["heart", "បេះដូង"]),
+    (5, ["blue smoke", "ផ្សែងខៀវ"]), (4, ["smoke", "ផ្សែង"]), (6, ["confetti", "popper", "ក្រដាសពណ៌"]),
+    (1, ["sparkler", "wand", "ផ្កាភ្លើង", "ដំបងភ្លើង"]),
+]
+DROP_RANK = [11, 3, 8, 10, 2, 7]
+
 BUDGET_PATTERNS = [
     r"\$\s*(\d[\d,]*(?:\.\d+)?)",
     r"(\d[\d,]*(?:\.\d+)?)\s*(?:usd|dollars?|bucks|ដុល្លារ)",
@@ -70,14 +89,15 @@ def clean_song(value) -> str:
     return song
 
 
-def make_cue(second: float, item_id: int, tip: str = "", effect: str = "") -> dict:
+def make_cue(second: float, item_id: int, tip: str = "", effect: str = "", lang: str = "en") -> dict:
     it = CATALOG_BY_ID[item_id]
-    return {"second": second, "item_id": item_id, "effect": effect or it["effect"], "placement_tip": tip or TIPS[it["effect"]]}
+    tips = TIPS_KM if lang == "km" else TIPS
+    return {"second": second, "item_id": item_id, "effect": effect or it["effect"], "placement_tip": tip or tips[it["effect"]]}
 
 
-def _swap(cue: dict, item_id: int):
-    cue.update(make_cue(cue["second"], item_id))
-    cue["placement_tip"] = "Swapped in to fit your budget. " + cue["placement_tip"]
+def _swap(cue: dict, item_id: int, lang: str = "en"):
+    cue.update(make_cue(cue["second"], item_id, lang=lang))
+    cue["placement_tip"] = SWAP_NOTE.get(lang, SWAP_NOTE["en"]) + cue["placement_tip"]
 
 
 def _cost(cues, extra) -> float:
@@ -89,7 +109,7 @@ def _free_second(cues, drop):
     return next((s for s in FILL_SECONDS if all(abs(s - t) >= 1 for t in taken)), 0.0)
 
 
-def plan_kit(cues: list, extra: dict, drop: float, budget):
+def plan_kit(cues: list, extra: dict, drop: float, budget, lang: str = "en"):
     """Returns (cues, qty_by_item): 4-6 cues, one on the drop, each cue uses one unit, fit to budget."""
     cues = [dict(c) for c in cues]
     near = [c for c in cues if abs(c["second"] - drop) < 0.6]
@@ -98,7 +118,7 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
     elif cues:
         drop_cue = max(cues, key=lambda c: price(c["item_id"]))
     else:
-        drop_cue = make_cue(drop, 3)
+        drop_cue = make_cue(drop, 3, lang=lang)
     drop_cue["second"] = drop
     others = [c for c in cues if c is not drop_cue and abs(c["second"] - drop) >= 0.6]
     others = sorted(others, key=lambda c: -price(c["item_id"]))[:5]
@@ -107,7 +127,7 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
     while len(others) < 3:
         rest = None if budget is None else budget - _cost([drop_cue] + others, extra)
         fits = [i for i in (9, 7, 1, 6) if rest is None or price(i) <= rest]
-        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else 6))
+        others.append(make_cue(_free_second([drop_cue] + others, drop), fits[0] if fits else 6, lang=lang))
 
     if budget is not None:
         def over():
@@ -122,14 +142,14 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
         while over():
             pricey = [c for c in others if c["item_id"] != 6]
             if pricey:
-                _swap(max(pricey, key=lambda c: price(c["item_id"])), 6)
+                _swap(max(pricey, key=lambda c: price(c["item_id"])), 6, lang)
                 continue
             rest = budget - _cost(others, {})
             options = [i for i in BIG_FIRST if price(i) <= rest and price(i) < price(drop_cue["item_id"])]
             new = options[0] if options else 6
             if new == drop_cue["item_id"]:
                 break
-            _swap(drop_cue, new)
+            _swap(drop_cue, new, lang)
 
     final = sorted([drop_cue] + others, key=lambda c: c["second"])
     qty = dict(extra)
@@ -138,18 +158,50 @@ def plan_kit(cues: list, extra: dict, drop: float, budget):
     return final, qty
 
 
-def fallback_raw(request: str, trends: dict) -> dict:
+def parse_crew(text: str) -> int:
+    t = text.lower().translate(KHMER_DIGITS)
+    m = re.search(r"(\d{1,2})\s*(?:of us|dancers?|people|friends|ppl|នាក់)", t)
+    if m:
+        return max(1, min(20, int(m.group(1))))
+    if re.search(r"\b(couple|duo|pair)\b|គូ", t):
+        return 2
+    return 1
+
+
+def requested_items(text: str) -> list:
+    t = text.lower()
+    found = []
+    for item_id, words in EFFECT_WORDS:
+        if any(w in t for w in words) and item_id not in found:
+            if item_id == 4 and 5 in found:
+                continue
+            found.append(item_id)
+    return found
+
+
+def fallback_raw(request: str, trends: dict, lang: str = "en") -> dict:
     drop = parse_drop(request) or 8.0
+    crew = parse_crew(request)
     sounds = trends.get("sounds") or []
     named = [x["title"] for x in sounds if x["title"].lower().strip(" .") in request.lower()]
-    song = named[0] if named else SONG_FALLBACK
-    seconds = [0.5, max(1.0, drop - 4), drop, min(14.5, drop + 2), 14.0 if drop < 12 else 1.5]
-    items = [1, 4, 11, 6, 9]
+    asked = requested_items(request)
+    drop_item = next((i for i in DROP_RANK if i in asked), 11)
+    rest = [i for i in asked if i != drop_item]
+    rest += [i for i in (1, 4, 6, 9) if i not in rest and i != drop_item]
+    cues = [make_cue(drop, drop_item, lang=lang)]
+    for item_id in rest[:4]:
+        cues.append(make_cue(_free_second(cues, drop), item_id, lang=lang))
+    wand = any(c["item_id"] == 1 for c in cues)
+    km = lang == "km"
     return {
-        "kit_name": "BoomDrop House Kit",
-        "song": song,
+        "kit_name": (f"កញ្ចប់ BoomDrop សម្រាប់ {crew} នាក់" if km else f"BoomDrop House Kit for {crew}"),
+        "song": named[0] if named else SONG_FALLBACK,
         "drop_second": drop,
-        "cues": [make_cue(s, i) for s, i in zip(seconds, items)],
-        "cart": [],
-        "filming_tip": "Shoot vertical at 60fps on a tripod 5 m back at waist height, after dark, with all dancers framed and headroom for the drop.",
+        "cues": cues,
+        "cart": [{"item_id": 1, "qty": crew}] if wand and crew > 1 else [],
+        "filming_tip": (
+            f"ថតបញ្ឈរ 60fps លើជើងកាមេរ៉ា ៥ ម៉ែត្រពីក្រោយ កម្ពស់ចង្កេះ ពេលយប់ ឱ្យឃើញអ្នករាំទាំង {crew} នាក់ និងមានចន្លោះខាងលើសម្រាប់ drop។"
+            if km else
+            f"Shoot vertical at 60fps on a tripod 5 m back at waist height, after dark, with all {crew} dancer{'s' if crew > 1 else ''} framed and headroom for the drop."
+        ),
     }

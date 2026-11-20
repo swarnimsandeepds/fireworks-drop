@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { Music2, Video, Play, ShoppingCart, Sparkles } from "lucide-react";
+import { Music2, Video, Play, ShoppingCart, Sparkles, Undo2 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { ShareKit } from "@/components/boom/ShareKit";
 import { WhyThisKit } from "@/components/boom/WhyThisKit";
@@ -9,7 +9,7 @@ import { Cart } from "@/components/boom/Cart";
 
 const ShotPreview = lazy(() => import("@/components/preview/ShotPreview"));
 
-export const ShotKitCard = ({ kit, changes, delivery }) => {
+export const ShotKitCard = ({ kit, changes, delivery, onUndo }) => {
   const t = useT();
   const [preview, setPreview] = useState(null);
   const [ordering, setOrdering] = useState(false);
@@ -54,6 +54,15 @@ export const ShotKitCard = ({ kit, changes, delivery }) => {
           <Play className="w-4 h-4 fill-current" /> {t("preview")}
         </button>
         <ShareKit kit={kit} />
+        {onUndo && (
+          <button
+            onClick={onUndo}
+            data-testid="undo-edit-btn"
+            className="mt-2 w-full h-11 rounded-full border border-[#FFD043]/40 text-[#FFD043] text-xs font-semibold flex items-center justify-center gap-2 hover:bg-[#FFD043]/10 transition-colors"
+          >
+            <Undo2 className="w-4 h-4" /> {t("undo")}
+          </button>
+        )}
       </header>
       {changes?.notes?.length > 0 && (
         <div className="mx-5 mt-5 rounded-2xl border border-[#FFD043]/50 bg-[#FFD043]/10 p-4 rise" data-testid="kit-changes-banner">

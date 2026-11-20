@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n";
 import { createBeat } from "./audio";
 import Fallback2D from "./Fallback2D";
 import { TikTokOverlay } from "./TikTokOverlay";
+import { drawOverlay } from "./clipOverlay";
 import { PreviewControls } from "./PreviewControls";
 
 const Scene3D = lazy(() => import("./Scene3D"));
@@ -102,13 +103,25 @@ export default function ShotPreview({ kit, audioCtx, onClose }) {
     recRef.current = true;
     const fail = () => { recRef.current = false; setRecording(false); toast.error(t("recordUnsupported")); };
     setTimeout(() => requestAnimationFrame(() => { try {
-      const stream = canvas.captureStream(30);
+      const out = document.createElement("canvas");
+      out.width = canvas.width;
+      out.height = canvas.height;
+      const ctx2d = out.getContext("2d");
+      let raf;
+      const paint = () => {
+        ctx2d.drawImage(canvas, 0, 0, out.width, out.height);
+        drawOverlay(ctx2d, out.width, out.height, { kit, t, time: getTime() });
+        raf = requestAnimationFrame(paint);
+      };
+      paint();
+      const stream = out.captureStream(30);
       beat?.stream?.getAudioTracks().forEach((tr) => stream.addTrack(tr));
       const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const chunks = [];
       rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
       rec.onstop = () => {
+        cancelAnimationFrame(raf);
         const type = rec.mimeType || "video/webm";
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob(chunks, { type }));

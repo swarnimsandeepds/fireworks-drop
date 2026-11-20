@@ -17,7 +17,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState("en");
   const [changes, setChanges] = useState(null);
-  const [delivery, setDelivery] = useState(null);
+  const [history, setHistory] = useState([]);
   const [editing, setEditing] = useState(false);
   const t = (k) => STR[lang][k] ?? STR.en[k];
 
@@ -40,14 +40,23 @@ function App() {
     try {
       const { data } = await axios.post(`${API}/shot-kit/${kit.id}/edit`, { command, lang });
       if (!data.applied) return toast.error(t("editFail"));
+      setHistory((h) => [...h.slice(-9), kit]);
       setChanges({ notes: data.changes, prev: kit });
       setKit(data.kit);
-      if (data.delivery) setDelivery((d) => ({ ...d, ...Object.fromEntries(Object.entries(data.delivery).filter(([, v]) => v)) }));
     } catch {
       toast.error(t("editFail"));
     } finally {
       setEditing(false);
     }
+  };
+
+  const undo = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory((h) => h.slice(0, -1));
+    setChanges(null);
+    setKit(prev);
+    toast.success(t("undone"));
   };
 
   const onTranscript = (tr) => {
@@ -62,7 +71,7 @@ function App() {
     try {
       const { data } = await axios.post(`${API}/shot-kit`, { request: text.trim(), lang });
       setChanges(null);
-      setDelivery(null);
+      setHistory([]);
       setKit(data);
       setTimeout(() => document.getElementById("shot-kit")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
@@ -97,7 +106,7 @@ function App() {
         <TrendingStrip onAdd={(c) => setText((cur) => (cur.trim() ? `${cur.trim().replace(/[.,]$/, "")}, ${c}` : c).slice(0, 2000))} />
         <MicButton onTranscript={onTranscript} disabled={loading || editing} editMode={!!kit} busy={editing} />
         <RequestInput transcript={transcript} text={text} setText={setText} onSubmit={buildKit} loading={loading || editing} />
-        {kit && <ShotKitCard kit={kit} changes={changes} delivery={delivery} />}
+        {kit && <ShotKitCard kit={kit} changes={changes} delivery={kit.delivery} onUndo={history.length && !editing ? undo : null} />}
       </main>
       <footer className="relative z-10 max-w-md mx-auto px-5 pb-10 text-center font-mono-bd text-[10px] uppercase tracking-widest text-slate-500" data-testid="app-footer">
         {t("footer")}

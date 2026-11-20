@@ -56,7 +56,7 @@ export default function Scene3D(props) {
     <Canvas
       data-testid="preview-3d-canvas"
       dpr={props.mobile ? [1, 1.5] : [1, 2]}
-      gl={{ antialias: false, powerPreference: "high-performance" }}
+      gl={{ antialias: false, powerPreference: "high-performance", preserveDrawingBuffer: true }}
       camera={{ position: [6, 4, 12], fov: 50, near: 0.1, far: 200 }}
       onCreated={() => requestAnimationFrame(() => props.onReady?.())}
     >
